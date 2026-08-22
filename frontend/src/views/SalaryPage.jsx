@@ -19,6 +19,7 @@ const SalaryPage = ({ user }) => {
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [editForm, setEditForm] = useState({
     Monthly_Wage: '',
+    working_days_per_week: 5,
     Basic_Salary: '',
     HRA: '',
     St_Allowance: '',
@@ -28,6 +29,17 @@ const SalaryPage = ({ user }) => {
     Provident_fund: '',
     Tax_Deduction: ''
   });
+
+  const [percentages, setPercentages] = useState({
+    basic: 50,
+    hra: 50,
+    stAll: 16.67,
+    perf: 8.33,
+    lta: 8.33,
+    pf: 12,
+    pt: 200
+  });
+
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
 
@@ -53,6 +65,34 @@ const SalaryPage = ({ user }) => {
   useEffect(() => {
     fetchSalaries();
   }, [selectedMonth, selectedYear]);
+
+  // Auto-calculate components based on percentages when wage or percentages change
+  useEffect(() => {
+    if (!editingEmployee) return;
+    const wage = parseFloat(editForm.Monthly_Wage) || 0;
+    const basic = parseFloat((wage * (percentages.basic / 100)).toFixed(2));
+    const hra = parseFloat((basic * (percentages.hra / 100)).toFixed(2));
+    const stAll = parseFloat((basic * (percentages.stAll / 100)).toFixed(2));
+    const perf = parseFloat((basic * (percentages.perf / 100)).toFixed(2));
+    const lta = parseFloat((basic * (percentages.lta / 100)).toFixed(2));
+    const pf = parseFloat((basic * (percentages.pf / 100)).toFixed(2));
+    const pt = parseFloat(percentages.pt) || 0;
+
+    const sum = basic + hra + stAll + perf + lta;
+    const fixedAll = Math.max(0, wage - sum);
+
+    setEditForm(prev => ({
+      ...prev,
+      Basic_Salary: basic,
+      HRA: hra,
+      St_Allowance: stAll,
+      Performance_Bonus: perf,
+      Leave_Travel_Allowance: lta,
+      fixed_Allowance: parseFloat(fixedAll.toFixed(2)),
+      Provident_fund: pf,
+      Tax_Deduction: pt
+    }));
+  }, [editForm.Monthly_Wage, percentages]);
 
   const fetchSalaries = async () => {
     setLoading(true);
@@ -136,9 +176,8 @@ td{padding:7px 12px;border-bottom:1px solid #f1f5f9;color:#334155}
 <div class="mr"><span class="mk">Department</span><span class="mv">${slip.emp_department}</span></div>
 <div class="mr"><span class="mk">Employee ID</span><span class="mv">#${slip.emp_id}</span></div>
 <div class="mr"><span class="mk">Designation</span><span class="mv">${slip.emp_role}</span></div>
-<div class="mr"><span class="mk">Worked Days</span><span class="mv">${slip.worked_days}/30</span></div>
-<div class="mr"><span class="mk">Approved Leaves</span><span class="mv">${slip.leave_days}</span></div>
-<div class="mr"><span class="mk">Absent Days</span><span class="mv">${slip.absent_days}</span></div>
+<div class="mr"><span class="mk">Payable Days</span><span class="mv">${slip.payable_days} / ${slip.total_working_days}</span></div>
+<div class="mr"><span class="mk">Leaves Taken</span><span class="mv">${slip.leave_days} (${slip.paid_leave_days} Paid)</span></div>
 <div class="mr"><span class="mk">Date of Issue</span><span class="mv">${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})}</span></div>
 </div>
 <div class="sec">Earnings Breakdown</div>
@@ -154,7 +193,7 @@ td{padding:7px 12px;border-bottom:1px solid #f1f5f9;color:#334155}
 <table><thead><tr><th>Component</th><th>Amount</th></tr></thead><tbody>
 <tr><td>Provident Fund (PF)</td><td class="ded">${fmt(slip.provident_fund)}</td></tr>
 <tr><td>Income Tax / TDS</td><td class="ded">${fmt(slip.tax_deduction)}</td></tr>
-<tr><td>Attendance Deduction (${slip.absent_days} day${slip.absent_days!==1?'s':''}, capped)</td><td class="ded">${fmt(slip.deductions)}</td></tr>
+<tr><td>Attendance Deduction (Lost Earnings)</td><td class="ded">${fmt(slip.deductions)}</td></tr>
 </tbody></table>
 <div class="totals"><div class="tbox te"><div class="tl">Gross Earnings</div><div class="tv">${fmt(gross)}</div></div>
 <div class="tbox td"><div class="tl">Total Deductions</div><div class="tv">${fmt(totalDed)}</div></div></div>
@@ -173,16 +212,32 @@ td{padding:7px 12px;border-bottom:1px solid #f1f5f9;color:#334155}
   const openEditModal = (sal) => {
     setEditingEmployee(sal);
     setSaveSuccess('');
+    
+    // Attempt to reverse-calculate percentages if possible, otherwise use defaults
+    const wage = sal.monthly_wage || sal.base_salary || 40000;
+    const basic = sal.basic_salary || (wage * 0.5);
+    
+    setPercentages({
+      basic: wage > 0 ? parseFloat(((basic / wage) * 100).toFixed(2)) : 50,
+      hra: basic > 0 ? parseFloat((((sal.hra || (wage*0.1)) / basic) * 100).toFixed(2)) : 50,
+      stAll: basic > 0 ? parseFloat((((sal.st_allowance || (wage*0.075)) / basic) * 100).toFixed(2)) : 16.67,
+      perf: basic > 0 ? parseFloat((((sal.performance_bonus || (wage*0.025)) / basic) * 100).toFixed(2)) : 8.33,
+      lta: basic > 0 ? parseFloat((((sal.leave_travel_allowance || (wage*0.025)) / basic) * 100).toFixed(2)) : 8.33,
+      pf: basic > 0 ? parseFloat((((sal.provident_fund || (wage*0.03)) / basic) * 100).toFixed(2)) : 12,
+      pt: sal.tax_deduction || 200
+    });
+
     setEditForm({
-      Monthly_Wage: sal.monthly_wage || sal.base_salary,
-      Basic_Salary: sal.basic_salary || (sal.base_salary * 0.5),
-      HRA: sal.hra || (sal.base_salary * 0.2),
-      St_Allowance: sal.st_allowance || (sal.base_salary * 0.15),
-      Performance_Bonus: sal.performance_bonus || (sal.base_salary * 0.05),
-      Leave_Travel_Allowance: sal.leave_travel_allowance || (sal.base_salary * 0.05),
-      fixed_Allowance: sal.fixed_allowance || (sal.base_salary * 0.05),
-      Provident_fund: sal.provident_fund || (sal.base_salary * 0.06),
-      Tax_Deduction: sal.tax_deduction || (sal.base_salary * 0.04)
+      Monthly_Wage: wage,
+      working_days_per_week: sal.working_days_per_week || 5,
+      Basic_Salary: basic,
+      HRA: sal.hra || (wage * 0.1),
+      St_Allowance: sal.st_allowance || (wage * 0.075),
+      Performance_Bonus: sal.performance_bonus || (wage * 0.025),
+      Leave_Travel_Allowance: sal.leave_travel_allowance || (wage * 0.025),
+      fixed_Allowance: sal.fixed_allowance || (wage * 0.025),
+      Provident_fund: sal.provident_fund || (wage * 0.03),
+      Tax_Deduction: sal.tax_deduction || 200
     });
   };
 
@@ -207,6 +262,38 @@ td{padding:7px 12px;border-bottom:1px solid #f1f5f9;color:#334155}
       setError(err.message || 'Failed to update salary structure');
     } finally {
       setSaveLoading(false);
+    }
+  };
+
+  const handleLockPayroll = async () => {
+    const monthLabel = monthsList.find(m => m.value === selectedMonth)?.label;
+    if (!window.confirm(`Are you sure you want to GENERATE & LOCK the payroll for ${monthLabel} ${selectedYear}?\n\nThis will permanently save these exact calculations for historical records.`)) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const unlockedPayrolls = salaries.filter(s => !s.is_locked);
+      
+      if (unlockedPayrolls.length === 0) {
+        alert('All visible records are already locked.');
+        setLoading(false);
+        return;
+      }
+      
+      await apiRequest('/salary/lock', {
+        method: 'POST',
+        body: JSON.stringify({
+          month: selectedMonth,
+          year: selectedYear,
+          payrolls: unlockedPayrolls
+        })
+      });
+      alert('Payroll locked successfully.');
+      fetchSalaries();
+    } catch (err) {
+      alert(err.message || 'Failed to lock payroll');
+      setLoading(false);
     }
   };
 
@@ -259,7 +346,17 @@ td{padding:7px 12px;border-bottom:1px solid #f1f5f9;color:#334155}
           {isManager ? (
             /* --- Admin/HR View: All Employee Payslips list --- */
             <div className="card no-print">
-              <h3 style={{ marginBottom: '16px' }}>Staff Payroll Summary ({monthsList.find(m => m.value === selectedMonth)?.label} {selectedYear})</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3>Staff Payroll Summary ({monthsList.find(m => m.value === selectedMonth)?.label} {selectedYear})</h3>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ width: 'auto', backgroundColor: '#ef4444' }} 
+                  onClick={handleLockPayroll}
+                  disabled={salaries.every(s => s.is_locked) || salaries.length === 0}
+                >
+                  🔒 {salaries.every(s => s.is_locked) && salaries.length > 0 ? 'Payroll Locked' : 'Generate & Lock Payroll'}
+                </button>
+              </div>
 
               <div className="table-container">
                 <table className="data-table">
@@ -282,10 +379,13 @@ td{padding:7px 12px;border-bottom:1px solid #f1f5f9;color:#334155}
                           <td>#{sal.emp_id}</td>
                           <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{sal.emp_name}</td>
                           <td><span className={`badge badge-${sal.emp_role.toLowerCase()}`}>{sal.emp_role}</span></td>
-                          <td>₹{sal.base_salary.toLocaleString()}</td>
-                          <td>{sal.worked_days} / 30</td>
-                          <td>{sal.leave_days}</td>
-                          <td style={{ fontWeight: '600', color: 'var(--success)' }}>₹{sal.net_salary.toLocaleString()}</td>
+                          <td>₹{sal.monthly_wage.toLocaleString()}</td>
+                          <td>{sal.payable_days} / {sal.total_working_days}</td>
+                          <td>{sal.leave_days} <span style={{fontSize:'0.75rem', color:'#64748b'}}>({sal.paid_leave_days} Paid)</span></td>
+                          <td style={{ fontWeight: '600', color: 'var(--success)' }}>
+                            ₹{sal.net_salary.toLocaleString()}
+                            {sal.is_locked && <span style={{marginLeft:'4px'}} title="Locked">🔒</span>}
+                          </td>
                           <td>
                             <div style={{ display: 'flex', gap: '8px' }}>
                               <button
@@ -342,77 +442,120 @@ td{padding:7px 12px;border-bottom:1px solid #f1f5f9;color:#334155}
             {saveSuccess && <div className="alert alert-success">{saveSuccess}</div>}
 
             <form onSubmit={handleSaveSalaryStructure}>
-              <div className="form-group">
-                <label className="form-label">Monthly Base Wage (₹)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={editForm.Monthly_Wage}
-                  onChange={(e) => setEditForm({ ...editForm, Monthly_Wage: e.target.value })}
-                  required
-                />
-              </div>
-
               <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">Basic Salary (₹)</label>
+                  <label className="form-label">Monthly Base Wage (₹)</label>
                   <input
                     type="number"
                     className="form-input"
-                    value={editForm.Basic_Salary}
-                    onChange={(e) => setEditForm({ ...editForm, Basic_Salary: e.target.value })}
+                    value={editForm.Monthly_Wage}
+                    onChange={(e) => setEditForm({ ...editForm, Monthly_Wage: e.target.value })}
+                    required
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">House Rent Allowance - HRA (₹)</label>
+                  <label className="form-label">Yearly Wage (₹)</label>
                   <input
                     type="number"
                     className="form-input"
-                    value={editForm.HRA}
-                    onChange={(e) => setEditForm({ ...editForm, HRA: e.target.value })}
+                    value={(parseFloat(editForm.Monthly_Wage) || 0) * 12}
+                    readOnly
+                    style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed' }}
                   />
                 </div>
               </div>
 
               <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">Special Allowance (₹)</label>
+                  <label className="form-label">No of working days in a week</label>
                   <input
                     type="number"
+                    min="1" max="7"
                     className="form-input"
-                    value={editForm.St_Allowance}
-                    onChange={(e) => setEditForm({ ...editForm, St_Allowance: e.target.value })}
+                    value={editForm.working_days_per_week}
+                    onChange={(e) => setEditForm({ ...editForm, working_days_per_week: e.target.value })}
+                    required
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Performance Bonus (₹)</label>
+                  <label className="form-label">Break Time (hrs/day)</label>
                   <input
                     type="number"
                     className="form-input"
-                    value={editForm.Performance_Bonus}
-                    onChange={(e) => setEditForm({ ...editForm, Performance_Bonus: e.target.value })}
+                    placeholder="e.g. 1"
+                    defaultValue={1}
                   />
+                </div>
+              </div>
+
+              <hr style={{ margin: '20px 0', borderColor: '#e2e8f0' }} />
+              <h4 style={{ marginBottom: '16px', color: '#4f46e5' }}>Salary Components (Auto-Calculated)</h4>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Basic Salary (% of Wage)</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input type="number" step="0.01" className="form-input" style={{ width: '80px' }} value={percentages.basic} onChange={(e) => setPercentages({...percentages, basic: e.target.value})} />
+                    <input type="number" className="form-input" value={editForm.Basic_Salary} readOnly style={{ backgroundColor: '#f1f5f9' }} />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">HRA (% of Basic)</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input type="number" step="0.01" className="form-input" style={{ width: '80px' }} value={percentages.hra} onChange={(e) => setPercentages({...percentages, hra: e.target.value})} />
+                    <input type="number" className="form-input" value={editForm.HRA} readOnly style={{ backgroundColor: '#f1f5f9' }} />
+                  </div>
                 </div>
               </div>
 
               <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">Provident Fund Deduction - PF (₹)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={editForm.Provident_fund}
-                    onChange={(e) => setEditForm({ ...editForm, Provident_fund: e.target.value })}
-                  />
+                  <label className="form-label">Standard Allowance (% of Basic)</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input type="number" step="0.01" className="form-input" style={{ width: '80px' }} value={percentages.stAll} onChange={(e) => setPercentages({...percentages, stAll: e.target.value})} />
+                    <input type="number" className="form-input" value={editForm.St_Allowance} readOnly style={{ backgroundColor: '#f1f5f9' }} />
+                  </div>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Tax Deduction (₹)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={editForm.Tax_Deduction}
-                    onChange={(e) => setEditForm({ ...editForm, Tax_Deduction: e.target.value })}
-                  />
+                  <label className="form-label">Performance Bonus (% of Basic)</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input type="number" step="0.01" className="form-input" style={{ width: '80px' }} value={percentages.perf} onChange={(e) => setPercentages({...percentages, perf: e.target.value})} />
+                    <input type="number" className="form-input" value={editForm.Performance_Bonus} readOnly style={{ backgroundColor: '#f1f5f9' }} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Leave Travel Allowance (% of Basic)</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input type="number" step="0.01" className="form-input" style={{ width: '80px' }} value={percentages.lta} onChange={(e) => setPercentages({...percentages, lta: e.target.value})} />
+                    <input type="number" className="form-input" value={editForm.Leave_Travel_Allowance} readOnly style={{ backgroundColor: '#f1f5f9' }} />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Fixed Allowance (Remainder)</label>
+                  <input type="number" className="form-input" value={editForm.fixed_Allowance} readOnly style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed' }} title="Wage - Total of all components" />
+                </div>
+              </div>
+
+              <hr style={{ margin: '20px 0', borderColor: '#e2e8f0' }} />
+              <h4 style={{ marginBottom: '16px', color: '#ef4444' }}>Statutory Deductions</h4>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Provident Fund - PF (% of Basic)</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input type="number" step="0.01" className="form-input" style={{ width: '80px' }} value={percentages.pf} onChange={(e) => setPercentages({...percentages, pf: e.target.value})} />
+                    <input type="number" className="form-input" value={editForm.Provident_fund} readOnly style={{ backgroundColor: '#f1f5f9' }} />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Professional Tax (Fixed ₹)</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input type="number" step="0.01" className="form-input" style={{ width: '80px' }} value={percentages.pt} onChange={(e) => setPercentages({...percentages, pt: e.target.value})} />
+                    <input type="number" className="form-input" value={editForm.Tax_Deduction} readOnly style={{ backgroundColor: '#f1f5f9' }} />
+                  </div>
                 </div>
               </div>
 
