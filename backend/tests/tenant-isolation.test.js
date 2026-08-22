@@ -148,8 +148,10 @@ describe('Employee isolation — GET /api/employees/:id (IDOR)', () => {
     const [sql, params] = mockQuery.mock.calls[0];
     expect(sql).toMatch(/emp_id\s*=\s*\?/i);
     expect(sql).toMatch(/company_id\s*=\s*\?/i);
-    expect(params).toContain(2); // target emp_id
-    expect(params).toContain(1); // company_id from token A
+    // Note: Express route params arrive as strings; the route passes them directly to the query.
+    // We check the target emp_id as a string ("2") and company_id as a number (1 from JWT).
+    expect(params).toContain('2'); // target emp_id (string from URL param)
+    expect(params).toContain(1);  // company_id from token A
   });
 
   test('Company A token can access Company A employee by ID', async () => {
@@ -221,8 +223,9 @@ describe('Employee isolation — DELETE /api/employees/:id', () => {
 
     const [sql, params] = mockQuery.mock.calls[0];
     expect(sql).toMatch(/company_id\s*=\s*\?/i);
-    expect(params).toContain(1); // Company A's id from token
-    expect(params).toContain(2); // target employee
+    expect(params).toContain(1);   // Company A's id from token
+    // Express route params are strings; the DELETE binds "2" (string from URL) to the query
+    expect(params).toContain('2'); // target employee (string from URL param)
   });
 });
 

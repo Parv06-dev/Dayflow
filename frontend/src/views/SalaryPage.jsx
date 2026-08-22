@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiRequest from '../services/apiService';
+import PayslipModal from './PayslipModal';
 
 const SalaryPage = ({ user }) => {
   const [salaries, setSalaries] = useState([]);
@@ -10,7 +11,7 @@ const SalaryPage = ({ user }) => {
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1); // 1-indexed
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
-  
+
   // Payslip detail modal
   const [selectedPayslip, setSelectedPayslip] = useState(null);
 
@@ -58,10 +59,10 @@ const SalaryPage = ({ user }) => {
     setError('');
     try {
       let endpoint = `/salary?month=${selectedMonth}&year=${selectedYear}`;
-      
+
       const data = await apiRequest(endpoint);
       setSalaries(data);
-      
+
       // If employee, set their payslip as default
       if (!isManager && data.length > 0) {
         setSelectedPayslip(data[0]);
@@ -75,6 +76,98 @@ const SalaryPage = ({ user }) => {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  /** Opens a dedicated blank window with only the payslip invoice — nothing else prints. */
+  const printPayslip = (slip) => {
+    const companyName =
+      slip.company_name && slip.company_name !== 'Dayflow Technologies'
+        ? slip.company_name
+        : user?.company_name || 'Odoo India';
+    const monthLabel = monthsList.find((m) => m.value === slip.month)?.label || String(slip.month);
+    const fmt = (n) =>
+      '\u20B9' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const gross =
+      slip.basic_salary + slip.hra + slip.st_allowance +
+      slip.performance_bonus + slip.leave_travel_allowance + (slip.fixed_allowance || 0);
+    const totalDed = slip.provident_fund + slip.tax_deduction + slip.deductions;
+
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>
+<title>Payslip \u2014 ${slip.emp_name} \u2014 ${monthLabel} ${slip.year}</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+@page{size:A4 portrait;margin:20mm 16mm}
+body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#1a1a2e;background:#fff}
+.hdr{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:14px;border-bottom:3px solid #4f46e5;margin-bottom:20px}
+.co-name{font-size:22px;font-weight:800;color:#4f46e5;letter-spacing:-0.5px}
+.sub{font-size:10px;color:#64748b;letter-spacing:2px;text-transform:uppercase;margin-top:3px}
+.period-box{text-align:right}.period-label{font-size:10px;color:#64748b;letter-spacing:1.5px;text-transform:uppercase}
+.period-val{font-size:18px;font-weight:700;color:#4f46e5;margin-top:2px}
+.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 32px;background:#f8f9ff;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin-bottom:20px}
+.mr{display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid #f1f5f9}
+.mr:last-child,.mr:nth-last-child(2){border:none}
+.mk{color:#64748b;font-size:11px}.mv{font-weight:600;color:#1e293b;font-size:11px;text-align:right}
+.sec{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#4f46e5;margin:0 0 8px;padding-bottom:4px;border-bottom:1px solid #e2e8f0}
+table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:11.5px}
+thead tr{background:#4f46e5;color:#fff}
+th{padding:8px 12px;text-align:left;font-weight:600;letter-spacing:.5px}
+th:last-child,td:last-child{text-align:right}
+tr:nth-child(even){background:#f8f9ff}
+td{padding:7px 12px;border-bottom:1px solid #f1f5f9;color:#334155}
+.earn{color:#15803d;font-weight:600}.ded{color:#b91c1c;font-weight:600}
+.totals{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.tbox{border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px}
+.tl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px}
+.tv{font-size:16px;font-weight:700;margin-top:4px}
+.te .tv{color:#15803d}.td .tv{color:#b91c1c}
+.net{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border-radius:10px;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.nl{font-size:13px;font-weight:600;letter-spacing:.5px;opacity:.9}
+.ns{font-size:10px;opacity:.7;margin-top:2px}
+.na{font-size:26px;font-weight:800;letter-spacing:-.5px}
+.footer{border-top:1px solid #e2e8f0;padding-top:12px;display:flex;justify-content:space-between;align-items:flex-end}
+.note{font-size:9.5px;color:#94a3b8;max-width:65%;line-height:1.5}
+.sig{text-align:right;font-size:10px;color:#64748b}
+.sigline{width:140px;border-top:1px solid #94a3b8;margin-top:28px;margin-left:auto}
+</style></head><body>
+<div class="hdr"><div><div class="co-name">${companyName}</div><div class="sub">Employee Salary Invoice</div></div>
+<div class="period-box"><div class="period-label">Pay Period</div><div class="period-val">${monthLabel.toUpperCase()} ${slip.year}</div></div></div>
+<div class="meta">
+<div class="mr"><span class="mk">Employee Name</span><span class="mv">${slip.emp_name}</span></div>
+<div class="mr"><span class="mk">Department</span><span class="mv">${slip.emp_department}</span></div>
+<div class="mr"><span class="mk">Employee ID</span><span class="mv">#${slip.emp_id}</span></div>
+<div class="mr"><span class="mk">Designation</span><span class="mv">${slip.emp_role}</span></div>
+<div class="mr"><span class="mk">Worked Days</span><span class="mv">${slip.worked_days}/30</span></div>
+<div class="mr"><span class="mk">Approved Leaves</span><span class="mv">${slip.leave_days}</span></div>
+<div class="mr"><span class="mk">Absent Days</span><span class="mv">${slip.absent_days}</span></div>
+<div class="mr"><span class="mk">Date of Issue</span><span class="mv">${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})}</span></div>
+</div>
+<div class="sec">Earnings Breakdown</div>
+<table><thead><tr><th>Component</th><th>Amount</th></tr></thead><tbody>
+<tr><td>Basic Salary</td><td class="earn">${fmt(slip.basic_salary)}</td></tr>
+<tr><td>House Rent Allowance (HRA)</td><td class="earn">${fmt(slip.hra)}</td></tr>
+<tr><td>Dearness / Special Allowance (DA)</td><td class="earn">${fmt(slip.st_allowance)}</td></tr>
+<tr><td>Performance Bonus</td><td class="earn">${fmt(slip.performance_bonus)}</td></tr>
+<tr><td>Leave Travel Allowance (LTA)</td><td class="earn">${fmt(slip.leave_travel_allowance)}</td></tr>
+<tr><td>Fixed Allowance</td><td class="earn">${fmt(slip.fixed_allowance||0)}</td></tr>
+</tbody></table>
+<div class="sec">Deductions</div>
+<table><thead><tr><th>Component</th><th>Amount</th></tr></thead><tbody>
+<tr><td>Provident Fund (PF)</td><td class="ded">${fmt(slip.provident_fund)}</td></tr>
+<tr><td>Income Tax / TDS</td><td class="ded">${fmt(slip.tax_deduction)}</td></tr>
+<tr><td>Attendance Deduction (${slip.absent_days} day${slip.absent_days!==1?'s':''}, capped)</td><td class="ded">${fmt(slip.deductions)}</td></tr>
+</tbody></table>
+<div class="totals"><div class="tbox te"><div class="tl">Gross Earnings</div><div class="tv">${fmt(gross)}</div></div>
+<div class="tbox td"><div class="tl">Total Deductions</div><div class="tv">${fmt(totalDed)}</div></div></div>
+<div class="net"><div><div class="nl">NET TAKE-HOME SALARY</div><div class="ns">${monthLabel} ${slip.year} &bull; ${companyName}</div></div><div class="na">${fmt(slip.net_salary)}</div></div>
+<div class="footer"><p class="note">System-generated. No physical signature required. For queries, contact HR.</p>
+<div class="sig"><div class="sigline"></div><div>Authorised Signatory</div><div style="margin-top:4px;color:#1e293b;font-weight:600">${companyName}</div></div></div>
+</body></html>`;
+    const win = window.open('', '_blank', 'width=850,height=1100');
+    if (!win) { alert('Popup blocked. Please allow popups and try again.'); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); win.close(); }, 400);
   };
 
   const openEditModal = (sal) => {
@@ -125,8 +218,8 @@ const SalaryPage = ({ user }) => {
           <div>
             <h3>Payroll & Payslips</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
-              {isManager 
-                ? 'Manage employee salary components, tax deductions, and download payslips.' 
+              {isManager
+                ? 'Manage employee salary components, tax deductions, and download payslips.'
                 : 'View and download your monthly compensation breakdown.'}
             </p>
           </div>
@@ -167,7 +260,7 @@ const SalaryPage = ({ user }) => {
             /* --- Admin/HR View: All Employee Payslips list --- */
             <div className="card no-print">
               <h3 style={{ marginBottom: '16px' }}>Staff Payroll Summary ({monthsList.find(m => m.value === selectedMonth)?.label} {selectedYear})</h3>
-              
+
               <div className="table-container">
                 <table className="data-table">
                   <thead>
@@ -224,132 +317,15 @@ const SalaryPage = ({ user }) => {
             </div>
           ) : null}
 
-          {/* --- Payslip Document View --- */}
+          {/* --- Payslip Modal (blurred backdrop popup) --- */}
           {selectedPayslip && (
-            <div className="payslip-box">
-              <div className="payslip-header">
-                <div>
-                  <div className="payslip-title">
-                    {(selectedPayslip.company_name && selectedPayslip.company_name !== 'Dayflow Technologies') 
-                      ? selectedPayslip.company_name 
-                      : (user?.company_name || 'Odoo India')}
-                  </div>
-                  <p style={{ fontSize: '0.8rem', marginTop: '4px', letterSpacing: '0.05em' }}>EMPLOYEE PAYROLL RECEIPT</p>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <p style={{ fontWeight: '700', color: 'var(--text-primary)' }}>PAYSLIP MONTH</p>
-                  <p style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--accent)', marginTop: '4px' }}>
-                    {monthsList.find(m => m.value === selectedPayslip.month)?.label.toUpperCase()} {selectedPayslip.year}
-                  </p>
-                </div>
-              </div>
-
-              <div className="payslip-details">
-                <div className="payslip-meta">
-                  <div className="payslip-meta-row">
-                    <span>Employee Name:</span>
-                    <span className="payslip-meta-val">{selectedPayslip.emp_name}</span>
-                  </div>
-                  <div className="payslip-meta-row">
-                    <span>Employee ID:</span>
-                    <span className="payslip-meta-val">#{selectedPayslip.emp_id}</span>
-                  </div>
-                  <div className="payslip-meta-row">
-                    <span>System Role:</span>
-                    <span className="payslip-meta-val">{selectedPayslip.emp_role}</span>
-                  </div>
-                </div>
-
-                <div className="payslip-meta">
-                  <div className="payslip-meta-row">
-                    <span>Department:</span>
-                    <span className="payslip-meta-val">{selectedPayslip.emp_department}</span>
-                  </div>
-                  <div className="payslip-meta-row">
-                    <span>Worked Days:</span>
-                    <span className="payslip-meta-val">{selectedPayslip.worked_days} / 30</span>
-                  </div>
-                  <div className="payslip-meta-row">
-                    <span>Approved Leave Days:</span>
-                    <span className="payslip-meta-val">{selectedPayslip.leave_days}</span>
-                  </div>
-                </div>
-              </div>
-
-              <table className="payslip-calc-table">
-                <thead>
-                  <tr>
-                    <th>Description</th>
-                    <th className="text-right">Earnings</th>
-                    <th className="text-right">Deductions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>Basic Salary</td>
-                    <td className="text-right" style={{ color: 'var(--text-primary)' }}>₹{(selectedPayslip.basic_salary).toLocaleString()}</td>
-                    <td className="text-right">--</td>
-                  </tr>
-                  <tr>
-                    <td>House Rent Allowance (HRA)</td>
-                    <td className="text-right" style={{ color: 'var(--text-primary)' }}>₹{(selectedPayslip.hra).toLocaleString()}</td>
-                    <td className="text-right">--</td>
-                  </tr>
-                  <tr>
-                    <td>Special Allowance</td>
-                    <td className="text-right" style={{ color: 'var(--text-primary)' }}>₹{(selectedPayslip.st_allowance).toLocaleString()}</td>
-                    <td className="text-right">--</td>
-                  </tr>
-                  <tr>
-                    <td>Performance Bonus & LTA</td>
-                    <td className="text-right" style={{ color: 'var(--text-primary)' }}>₹{((selectedPayslip.performance_bonus) + (selectedPayslip.leave_travel_allowance)).toLocaleString()}</td>
-                    <td className="text-right">--</td>
-                  </tr>
-                  <tr>
-                    <td>Provident Fund (PF)</td>
-                    <td className="text-right">--</td>
-                    <td className="text-right" style={{ color: 'var(--error)' }}>
-                      ₹{(selectedPayslip.provident_fund).toLocaleString()}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>Tax Deduction</td>
-                    <td className="text-right">--</td>
-                    <td className="text-right" style={{ color: 'var(--error)' }}>
-                      ₹{(selectedPayslip.tax_deduction).toLocaleString()}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>Attendance Deductions ({selectedPayslip.absent_days} Unapproved Absent days - Capped)</td>
-                    <td className="text-right">--</td>
-                    <td className="text-right" style={{ color: 'var(--error)' }}>
-                      ₹{selectedPayslip.deductions.toLocaleString()}
-                    </td>
-                  </tr>
-                  <tr className="payslip-summary-row">
-                    <td>NET REMUNERATION</td>
-                    <td colSpan="2" className="text-right payslip-net-glow">
-                      ₹{selectedPayslip.net_salary.toLocaleString()}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-
-              <div className="payslip-footer-msg">
-                * This is a computer-generated document and does not require a physical signature.
-              </div>
-
-              <div className="payslip-actions-row no-print">
-                {isManager && (
-                  <button className="btn btn-secondary" onClick={() => setSelectedPayslip(null)}>
-                    Close Preview
-                  </button>
-                )}
-                <button className="btn btn-success" onClick={handlePrint}>
-                  🖨️ Print / Download PDF
-                </button>
-              </div>
-            </div>
+            <PayslipModal
+              slip={selectedPayslip}
+              user={user}
+              monthLabel={monthsList.find((m) => m.value === selectedPayslip.month)?.label || String(selectedPayslip.month)}
+              onClose={() => setSelectedPayslip(null)}
+              onPrint={() => printPayslip(selectedPayslip)}
+            />
           )}
         </>
       )}

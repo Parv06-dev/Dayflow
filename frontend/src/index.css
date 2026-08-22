@@ -1307,8 +1307,339 @@ button, input, select, textarea {
   margin-top: 24px;
 }
 
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PayslipModal — Blurred backdrop + slide-up panel
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Backdrop: covers the whole viewport, blurs everything behind it */
+.pslip-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px 40px;
+  overflow-y: auto;
+  background: rgba(10, 9, 21, 0.72);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  animation: pslip-fade-in 0.2s ease;
+}
+
+@keyframes pslip-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Floating panel */
+.pslip-panel {
+  position: relative;
+  width: 100%;
+  max-width: 760px;
+  background: linear-gradient(145deg, #14122b, #1a1735);
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  border-radius: 20px;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.04),
+    0 32px 64px rgba(0,0,0,0.6),
+    0 0 80px rgba(99, 102, 241, 0.08);
+  overflow: hidden;
+  animation: pslip-slide-up 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes pslip-slide-up {
+  from { transform: translateY(40px) scale(0.97); opacity: 0; }
+  to   { transform: translateY(0)     scale(1);    opacity: 1; }
+}
+
+/* ── Sticky topbar ── */
+.pslip-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: rgba(20, 18, 43, 0.9);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.pslip-topbar-title {
+  font-family: var(--font-title);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.pslip-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 0.83rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, transform 0.15s;
+}
+.pslip-back-btn:hover {
+  background: rgba(99,102,241,0.12);
+  border-color: rgba(99,102,241,0.35);
+  transform: translateX(-2px);
+}
+
+.pslip-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.pslip-close-btn:hover {
+  background: rgba(244, 63, 94, 0.12);
+  color: var(--error);
+}
+
+/* ── Scrollable body ── */
+.pslip-body {
+  padding: 28px 32px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Company / period hero strip ── */
+.pslip-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding-bottom: 20px;
+  border-bottom: 2px solid rgba(99,102,241,0.25);
+}
+
+.pslip-company-name {
+  font-family: var(--font-title);
+  font-size: 1.55rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.03em;
+}
+
+.pslip-subtitle {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.pslip-hero-right { text-align: right; }
+.pslip-period-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.pslip-period-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-top: 4px;
+  letter-spacing: 0.04em;
+}
+
+/* ── Meta info grid (2-col) ── */
+.pslip-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 24px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+
+.pslip-meta-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.pslip-meta-item:last-child,
+.pslip-meta-item:nth-last-child(2) { border-bottom: none; }
+
+.pslip-meta-key {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.pslip-meta-val {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: right;
+}
+
+/* ── Section titles ── */
+.pslip-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--primary);
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(99,102,241,0.18);
+  margin-bottom: -8px;
+}
+.pslip-section-icon { font-size: 0.9rem; }
+
+/* ── Earnings / Deductions table ── */
+.pslip-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.pslip-table thead tr {
+  background: rgba(99,102,241,0.1);
+}
+.pslip-table thead th {
+  padding: 9px 14px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.pslip-table tbody tr {
+  transition: background 0.12s;
+}
+.pslip-table tbody tr:hover {
+  background: rgba(255,255,255,0.03);
+}
+.pslip-table tbody td {
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+}
+.pslip-table tbody tr:last-child td { border-bottom: none; }
+.pslip-earn  { color: #34d399 !important; font-weight: 600; }
+.pslip-deduct { color: #fb7185 !important; font-weight: 600; }
+.text-right { text-align: right !important; }
+
+/* ── Gross vs Deductions summary boxes ── */
+.pslip-summary-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.pslip-summary-box {
+  border-radius: 10px;
+  padding: 14px 18px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.pslip-summary-earn   { background: rgba(16, 185, 129, 0.08); border-color: rgba(52,211,153,0.2); }
+.pslip-summary-deduct { background: rgba(244, 63, 94, 0.08);  border-color: rgba(251,113,133,0.2); }
+
+.pslip-summary-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.pslip-summary-earn   .pslip-summary-val { color: #34d399; }
+.pslip-summary-deduct .pslip-summary-val { color: #fb7185; }
+.pslip-summary-val {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-top: 6px;
+  font-family: var(--font-title);
+}
+
+/* ── Net salary banner ── */
+.pslip-net-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  border-radius: 14px;
+  padding: 20px 26px;
+  box-shadow: 0 8px 24px rgba(99,102,241,0.35);
+}
+.pslip-net-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.88;
+  color: #fff;
+}
+.pslip-net-sub {
+  font-size: 0.72rem;
+  opacity: 0.6;
+  color: #fff;
+  margin-top: 3px;
+}
+.pslip-net-amount {
+  font-family: var(--font-title);
+  font-size: 2rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.04em;
+}
+
+/* ── Footer note ── */
+.pslip-footer-note {
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.6;
+  padding: 12px 0 0;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+/* ── Action buttons row ── */
+.pslip-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+/* ── Responsive: smaller screens ── */
+@media (max-width: 600px) {
+  .pslip-body { padding: 20px 16px 28px; }
+  .pslip-meta-grid { grid-template-columns: 1fr; }
+  .pslip-summary-row { grid-template-columns: 1fr; }
+  .pslip-hero { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .pslip-hero-right { text-align: left; }
+  .pslip-net-banner { flex-direction: column; gap: 10px; text-align: center; }
+  .pslip-net-amount { font-size: 1.6rem; }
+}
+
 /* Print Specific CSS */
 @media print {
+
   body {
     background: white !important;
     color: black !important;
