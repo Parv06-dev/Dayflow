@@ -24,6 +24,7 @@ const getLocalTimeString = () => {
 // Clock In / Clock Out Toggle (Authenticated users)
 router.post('/punch', authenticateToken, async (req, res) => {
   const empId = req.user.emp_id;
+  const requestedAction = req.body.action && req.body.action.toUpperCase();
   const today = getLocalDateString();
   const nowTime = getLocalTimeString();
 
@@ -35,9 +36,10 @@ router.post('/punch', authenticateToken, async (req, res) => {
     );
 
     const record = existing[0];
+    const action = requestedAction || (record && !record.logout_time ? 'OUT' : 'IN');
 
-    if (!record || record.logout_time !== null) {
-      // Clock in a new shift when no shift is open.
+    if (action === 'IN' && (!record || record.logout_time)) {
+      // Clock In (Insert new record)
       await db.query(
         'INSERT INTO Attendance (emp_id, attendance_date, login_time, logout_time) VALUES (?, ?, ?, NULL)',
         [empId, today, nowTime]
@@ -48,8 +50,8 @@ router.post('/punch', authenticateToken, async (req, res) => {
         login_time: nowTime,
         logout_time: null
       });
-    } else {
-      // Clock out the currently open shift.
+    } else if (action === 'OUT' && record && !record.logout_time) {
+      // Clock Out (Update existing record)
       await db.query(
         'UPDATE Attendance SET logout_time = ? WHERE attendance_id = ?',
         [nowTime, record.attendance_id]
@@ -61,6 +63,8 @@ router.post('/punch', authenticateToken, async (req, res) => {
         login_time: record.login_time,
         logout_time: nowTime
       });
+    } else {
+      return res.status(409).json({ message: action === 'IN' ? 'You are already checked in.' : 'You are not checked in.' });
     }
   } catch (error) {
     console.error('Punch error:', error);
