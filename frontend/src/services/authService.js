@@ -2,11 +2,11 @@ import apiRequest from './apiService';
 
 const authService = {
   // Login
-  login: async (email, password) => {
+  login: async (loginIdentifier, password) => {
     try {
       const data = await apiRequest('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ loginIdentifier, password }),
       });
       if (data.token) {
         localStorage.setItem('dayflow_token', data.token);

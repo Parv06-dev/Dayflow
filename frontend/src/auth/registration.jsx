@@ -2,40 +2,43 @@ import React, { useState } from 'react';
 import authService from '../services/authService';
 
 const Registration = ({ onViewChange }) => {
+  const [companyName, setCompanyName] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
   const [name, setName] = useState('');
-  const [department, setDepartment] = useState('');
-  const [role, setRole] = useState('EMPLOYEE');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [createdInfo, setCreatedInfo] = useState(null);
+
+  const handleLogoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoUrl(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setSuccess('');
+    setCreatedInfo(null);
 
-    if (!name || !department || !role || !email || !phone || !password) {
-      setError('Please fill in all fields');
+    if (!companyName || !name || !email || !phone || !password || !confirmPassword) {
+      setError('Please fill in all required fields');
       return;
     }
 
-    // Client-side validation matching the backend wireframe specs
-    const normalizedRole = role.toUpperCase();
-    const normalizedEmail = email.toLowerCase();
-
-    if (normalizedRole === 'ADMIN') {
-      if (!normalizedEmail.includes('@admin') && !normalizedEmail.endsWith('admin.com')) {
-        setError('Admin registration requires an email containing "@admin" or ending in "admin.com"');
-        return;
-      }
-    } else if (normalizedRole === 'HR') {
-      if (!normalizedEmail.includes('@hr') && !normalizedEmail.endsWith('hr.com')) {
-        setError('HR registration requires an email containing "@hr" or ending in "hr.com"');
-        return;
-      }
+    if (password !== confirmPassword) {
+      setError('Password and Confirm Password do not match');
+      return;
     }
 
     if (phone.length !== 10 || isNaN(phone)) {
@@ -46,21 +49,22 @@ const Registration = ({ onViewChange }) => {
     setLoading(true);
 
     try {
-      await authService.register({
+      const result = await authService.register({
+        companyName,
+        logoUrl,
         name,
-        department,
-        role,
         email,
         phone,
-        password
+        password,
+        confirmPassword
       });
 
-      setSuccess('Account created successfully! Redirecting to Login...');
-      setTimeout(() => {
-        onViewChange('login');
-      }, 2000);
+      setCreatedInfo({
+        loginId: result.loginId,
+        email: result.email
+      });
     } catch (err) {
-      setError(err.message || 'Registration failed. Please try again.');
+      setError(err.message || 'Company Sign Up failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -68,115 +72,174 @@ const Registration = ({ onViewChange }) => {
 
   return (
     <div className="auth-page">
-      <div className="auth-card" style={{ maxWidth: '500px' }}>
+      <div className="auth-card" style={{ maxWidth: '520px' }}>
         <div className="auth-header">
-          <div className="auth-logo">
-            Dayflow <div className="logo-dot"></div>
+          <div className="auth-logo-wireframe">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo" style={{ maxHeight: '40px' }} />
+            ) : (
+              'App/Web Logo'
+            )}
           </div>
-          <p className="auth-subtitle">Create a new Employee Resource account</p>
         </div>
 
         {error && <div className="alert alert-error">{error}</div>}
-        {success && <div className="alert alert-success">{success}</div>}
 
-        <form onSubmit={handleSubmit}>
-          <div className="form-row">
+        {createdInfo ? (
+          <div className="alert alert-success" style={{ textAlign: 'center', padding: '20px' }}>
+            <h3 style={{ marginBottom: '10px' }}>🎉 Registration Successful!</h3>
+            <p style={{ margin: '5px 0' }}>Your System-Generated Login ID:</p>
+            <div className="login-id-badge" style={{ fontSize: '1.4rem', fontWeight: 'bold', margin: '10px 0', letterSpacing: '1px' }}>
+              {createdInfo.loginId}
+            </div>
+            <p style={{ fontSize: '0.85rem', color: '#666' }}>
+              Please note down your Login ID. You can sign in using this Login ID or your email address.
+            </p>
+            <button
+              onClick={() => onViewChange('login')}
+              className="btn btn-primary wireframe-btn"
+              style={{ marginTop: '15px' }}
+            >
+              Go to Sign In
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            {/* Company Name + Upload Logo */}
             <div className="form-group">
-              <label className="form-label" htmlFor="reg-name">Full Name</label>
+              <label className="form-label">Company Name :-</label>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Odoo India"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  required
+                />
+                <label className="upload-logo-btn" title="Upload Logo">
+                  📁 Upload Logo
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Name */}
+            <div className="form-group">
+              <label className="form-label">Name :-</label>
               <input
                 type="text"
-                id="reg-name"
                 className="form-input"
-                placeholder="e.g. John Doe"
+                placeholder="Full Name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
               />
             </div>
+
+            {/* Email */}
             <div className="form-group">
-              <label className="form-label" htmlFor="reg-dept">Department</label>
+              <label className="form-label">Email :-</label>
               <input
-                type="text"
-                id="reg-dept"
+                type="email"
                 className="form-input"
-                placeholder="e.g. Engineering"
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
+                placeholder="e.g. admin@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
-          </div>
 
-          <div className="form-row">
+            {/* Phone */}
             <div className="form-group">
-              <label className="form-label" htmlFor="reg-role">System Role</label>
-              <select
-                id="reg-role"
-                className="form-input"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                required
-              >
-                <option value="EMPLOYEE">Employee</option>
-                <option value="HR">HR Manager</option>
-                <option value="ADMIN">System Admin</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="reg-phone">Phone Number</label>
+              <label className="form-label">Phone :-</label>
               <input
                 type="tel"
-                id="reg-phone"
                 className="form-input"
-                placeholder="10-digit number"
+                placeholder="10-digit Phone Number"
                 maxLength="10"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 required
               />
             </div>
-          </div>
 
-          <div className="form-group">
-            <label className="form-label" htmlFor="reg-email">Email Address</label>
-            <input
-              type="email"
-              id="reg-email"
-              className="form-input"
-              placeholder="e.g. john@gmail.com, admin@admin.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-            {role === 'ADMIN' && <small style={{ color: 'var(--accent)' }}>Must contain '@admin' or end with 'admin.com'</small>}
-            {role === 'HR' && <small style={{ color: 'var(--accent)' }}>Must contain '@hr' or end with 'hr.com'</small>}
-          </div>
+            {/* Password */}
+            <div className="form-group">
+              <label className="form-label">Password :-</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="form-input"
+                  placeholder="Enter Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  style={{ paddingRight: '40px' }}
+                />
+                <span
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    cursor: 'pointer',
+                    userSelect: 'none'
+                  }}
+                >
+                  {showPassword ? '👁️' : '🙈'}
+                </span>
+              </div>
+            </div>
 
-          <div className="form-group">
-            <label className="form-label" htmlFor="reg-password">Password</label>
-            <input
-              type="password"
-              id="reg-password"
-              className="form-input"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
+            {/* Confirm Password */}
+            <div className="form-group">
+              <label className="form-label">Confirm Password :-</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  className="form-input"
+                  placeholder="Confirm Password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  style={{ paddingRight: '40px' }}
+                />
+                <span
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    cursor: 'pointer',
+                    userSelect: 'none'
+                  }}
+                >
+                  {showConfirmPassword ? '👁️' : '🙈'}
+                </span>
+              </div>
+            </div>
 
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={loading}
-            style={{ marginTop: '10px' }}
-          >
-            {loading ? 'Creating Account...' : 'Register'}
-          </button>
-        </form>
+            <button
+              type="submit"
+              className="btn btn-primary btn-block wireframe-btn"
+              disabled={loading}
+              style={{ marginTop: '15px' }}
+            >
+              {loading ? 'Signing Up...' : 'Sign Up'}
+            </button>
+          </form>
+        )}
 
         <div className="auth-footer">
-          Already have an account?{' '}
+          Already have an account ?{' '}
           <span className="auth-link" onClick={() => onViewChange('login')}>
             Sign In
           </span>

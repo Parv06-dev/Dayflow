@@ -41,26 +41,12 @@ router.post('/', authenticateToken, isAdminOrHR, async (req, res) => {
     return res.status(400).json({ message: 'Name, department, role, email, and phone are required' });
   }
 
-  // Validate role email rules from wireframe
   const normalizedRole = role.toUpperCase();
   const normalizedEmail = email.toLowerCase();
-
-  if (normalizedRole === 'ADMIN') {
-    if (!normalizedEmail.includes('@admin') && !normalizedEmail.endsWith('admin.com')) {
-      return res.status(400).json({ message: 'Admin registration requires an email containing "@admin" or ending in "admin.com"' });
-    }
-  } else if (normalizedRole === 'HR') {
-    if (!normalizedEmail.includes('@hr') && !normalizedEmail.endsWith('hr.com')) {
-      return res.status(400).json({ message: 'HR registration requires an email containing "@hr" or ending in "hr.com"' });
-    }
-  }
 
   if (phone.length !== 10 || isNaN(phone)) {
     return res.status(400).json({ message: 'Phone number must be exactly 10 digits' });
   }
-
-  // Use provided password or default 'password123'
-  const finalPassword = password || 'password123';
 
   const conn = await db.getConnection();
   try {
@@ -77,30 +63,61 @@ router.post('/', authenticateToken, isAdminOrHR, async (req, res) => {
       return res.status(400).json({ message: 'Email or phone number already in use' });
     }
 
+    // Fetch user's company code
+    const [companyRow] = await conn.query(
+      `SELECT c.company_code, c.company_id 
+       FROM Employee e JOIN Company c ON e.company_id = c.company_id 
+       WHERE e.emp_id = ?`,
+      [req.user.emp_id]
+    );
+
+    const compCode = companyRow.length > 0 ? companyRow[0].company_code : 'DF';
+    const companyId = companyRow.length > 0 ? companyRow[0].company_id : null;
+
+    // Generate Login ID
+    const currentYear = new Date().getFullYear();
+    const [serialRow] = await conn.query(
+      'SELECT COUNT(*) as count FROM Employee WHERE joining_year = ?',
+      [currentYear]
+    );
+    const serial = serialRow[0].count + 1;
+    const { generateLoginId, generateTempPassword } = require('../utils/helpers');
+    const loginId = generateLoginId(compCode, name, currentYear, serial);
+
+    // Temp password if not specified
+    const rawPassword = password || generateTempPassword();
+
     // Insert Employee
     const [empResult] = await conn.query(
-      'INSERT INTO Employee (emp_name, emp_department, emp_role, emp_email, emp_phno) VALUES (?, ?, ?, ?, ?)',
-      [name, department, normalizedRole, email, phone]
+      `INSERT INTO Employee 
+       (login_id, emp_name, emp_department, emp_role, emp_email, emp_phno, joining_year, serial_num, company_id) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [loginId, name, department, normalizedRole, normalizedEmail, phone, currentYear, serial, companyId]
     );
 
     const empId = empResult.insertId;
 
     // Hash password
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(finalPassword, salt);
+    const hashedPassword = await bcrypt.hash(rawPassword, salt);
 
     // Insert Login
     await conn.query(
-      'INSERT INTO Login (emp_id, Password, acc_status) VALUES (?, ?, ?)',
-      [empId, hashedPassword, 'Active']
+      'INSERT INTO Login (emp_id, login_id, Password, acc_status, is_temp_pass) VALUES (?, ?, ?, ?, ?)',
+      [empId, loginId, hashedPassword, 'Active', password ? false : true]
     );
 
     await conn.commit();
-    return res.status(201).json({ message: 'Employee added successfully', emp_id: empId });
+    return res.status(201).json({
+      message: 'Employee created successfully',
+      emp_id: empId,
+      login_id: loginId,
+      temp_password: rawPassword
+    });
   } catch (error) {
     await conn.rollback();
     console.error('Add employee error:', error);
-    return res.status(500).json({ message: 'Internal Server Error' });
+    return res.status(500).json({ message: 'Internal Server Error: ' + error.message });
   } finally {
     conn.release();
   }
