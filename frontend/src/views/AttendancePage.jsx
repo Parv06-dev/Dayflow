@@ -1,193 +1,240 @@
 import React, { useState, useEffect } from 'react';
 import apiRequest from '../services/apiService';
 
+const calculateWorkHours = (login, logout) => {
+  if (!login || !logout) return { work: '--:--', extra: '--:--' };
+  const [linH, linM] = login.split(':').map(Number);
+  const [loutH, loutM] = logout.split(':').map(Number);
+  const worked = (loutH + loutM/60) - (linH + linM/60);
+  if (worked <= 0) return { work: '00:00', extra: '00:00' };
+  
+  const wH = Math.floor(worked);
+  const wM = Math.round((worked - wH) * 60);
+  const formattedWork = `${String(wH).padStart(2, '0')}:${String(wM).padStart(2, '0')}`;
+  
+  let formattedExtra = '00:00';
+  if (worked > 8) {
+    const extra = worked - 8;
+    const eH = Math.floor(extra);
+    const eM = Math.round((extra - eH) * 60);
+    formattedExtra = `${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}`;
+  }
+  return { work: formattedWork, extra: formattedExtra };
+};
+
 const AttendancePage = ({ user }) => {
-  const [history, setHistory] = useState([]);
-  const [punchStatus, setPunchStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [currentTime, setCurrentTime] = useState(new Date());
-
-  // Manager capabilities
-  const [employees, setEmployees] = useState([]);
-  const [selectedEmpId, setSelectedEmpId] = useState(user.emp_id);
   const isManager = user.emp_role === 'ADMIN' || user.emp_role === 'HR';
-
-  useEffect(() => {
-    // Tick clock every second
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  
+  const [history, setHistory] = useState([]);
+  const [leaves, setLeaves] = useState([]);
+  const [adminTodayData, setAdminTodayData] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (isManager) {
-      fetchEmployeesList();
+      fetchAdminData();
+    } else {
+      fetchEmployeeData();
     }
   }, []);
 
-  useEffect(() => {
-    fetchPunchStatus();
-    fetchAttendanceHistory();
-  }, [selectedEmpId]);
-
-  const fetchEmployeesList = async () => {
-    try {
-      const data = await apiRequest('/employees');
-      setEmployees(data);
-    } catch (err) {
-      console.error('Error fetching employees list:', err);
-    }
-  };
-
-  const fetchPunchStatus = async () => {
-    // Only check punch status for the logged-in user themselves
-    if (selectedEmpId === user.emp_id) {
-      try {
-        const data = await apiRequest('/attendance/status');
-        setPunchStatus(data);
-      } catch (err) {
-        console.error('Error fetching punch status:', err);
-      }
-    } else {
-      setPunchStatus(null);
-    }
-  };
-
-  const fetchAttendanceHistory = async () => {
+  const fetchEmployeeData = async () => {
     setLoading(true);
     try {
-      const data = await apiRequest(`/attendance/employee/${selectedEmpId}`);
-      setHistory(data);
+      const historyData = await apiRequest(`/attendance/employee/${user.emp_id}`);
+      setHistory(historyData);
+      
+      const leavesData = await apiRequest(`/leaves?emp_id=${user.emp_id}`);
+      setLeaves(leavesData);
     } catch (err) {
-      console.error('Error fetching history:', err);
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePunch = async () => {
+  const fetchAdminData = async () => {
+    setLoading(true);
     try {
-      const data = await apiRequest('/attendance/punch', { method: 'POST' });
-      fetchPunchStatus();
-      fetchAttendanceHistory();
-      alert(data.message);
+      const todayData = await apiRequest('/attendance/today');
+      setAdminTodayData(todayData.punches || []);
     } catch (err) {
-      alert(err.message || 'Failed to punch');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
+  const handlePrevMonth = () => {
+    setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  // Calculations for Employee View
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth();
+
+  const filteredHistory = history.filter(row => {
+    const rowDate = new Date(row.attendance_date);
+    return rowDate.getFullYear() === currentYear && rowDate.getMonth() === currentMonth;
+  });
+
+  const daysPresent = filteredHistory.length;
+
+  const getWorkingDaysInMonth = (year, month) => {
+    let count = 0;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    for (let i = 1; i <= daysInMonth; i++) {
+      const d = new Date(year, month, i);
+      if (d.getDay() !== 0 && d.getDay() !== 6) count++;
+    }
+    return count;
+  };
+  const totalWorkingDays = getWorkingDaysInMonth(currentYear, currentMonth);
+
+  let leavesCount = 0;
+  leaves.forEach(leave => {
+    if (leave.approved_status === 'Approved') {
+      let start = new Date(leave.from_date);
+      let end = new Date(leave.to_date);
+      
+      let monthStart = new Date(currentYear, currentMonth, 1);
+      let monthEnd = new Date(currentYear, currentMonth + 1, 0);
+
+      let actualStart = start > monthStart ? start : monthStart;
+      let actualEnd = end < monthEnd ? end : monthEnd;
+
+      if (actualStart <= actualEnd) {
+        actualStart.setHours(0, 0, 0, 0);
+        actualEnd.setHours(0, 0, 0, 0);
+        let count = 0;
+        let d = new Date(actualStart);
+        while (d <= actualEnd) {
+          if (d.getDay() !== 0 && d.getDay() !== 6) count++;
+          d.setDate(d.getDate() + 1);
+        }
+        leavesCount += count;
+      }
+    }
+  });
+
+  if (loading) {
+    return <div style={{ padding: '24px', textAlign: 'center' }}>Loading attendance data...</div>;
+  }
+
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '1.75rem', marginBottom: '6px' }}>Attendance Log</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Clock in/out of work shifts and review historical records.</p>
-      </div>
-
-      {isManager && (
-        <div className="card" style={{ marginBottom: '24px', padding: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <label style={{ fontWeight: '600', fontSize: '0.9rem' }}>View Log for Employee:</label>
-            <select
-              className="form-input"
-              style={{ width: 'auto', minWidth: '240px' }}
-              value={selectedEmpId}
-              onChange={(e) => setSelectedEmpId(parseInt(e.target.value))}
-            >
-              <option value={user.emp_id}>{user.emp_name} (Self)</option>
-              {employees
-                .filter(e => e.emp_id !== user.emp_id)
-                .map(e => (
-                  <option key={e.emp_id} value={e.emp_id}>
-                    {e.emp_name} ({e.emp_role} - {e.emp_department})
-                  </option>
-                ))}
-            </select>
-          </div>
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        
+        {/* Header Row */}
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', padding: '12px 16px', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, width: isManager ? 'auto' : '100%', marginRight: isManager ? '24px' : '0' }}>Attendance</h3>
+          {isManager && (
+            <input 
+              type="text" 
+              placeholder="Searchbar" 
+              className="form-input" 
+              style={{ flex: 1, padding: '6px 12px', borderRadius: '16px', maxWidth: '400px' }} 
+              value={searchQuery} 
+              onChange={e => setSearchQuery(e.target.value)} 
+            />
+          )}
         </div>
-      )}
 
-      <div className="dashboard-layout">
-        {selectedEmpId === user.emp_id && (
-          <div className="dashboard-side">
-            <div className="card-glass punch-card-wrapper">
-              <h3 style={{ marginBottom: '12px' }}>Clock Work Shift</h3>
-              <div className="digital-clock">
-                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-              </div>
-              <div className="clock-date">
-                {currentTime.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-              </div>
-
-              <button
-                className={`punch-circle-btn ${punchStatus?.punchedIn && !punchStatus?.logout_time ? 'punched' : ''}`}
-                onClick={handlePunch}
-              >
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                {punchStatus?.punchedIn && !punchStatus?.logout_time ? 'Clock Out' : 'Clock In'}
+        {/* Toolbar Row */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', borderBottom: '1px solid var(--border-color)', padding: '12px 16px' }}>
+          <button className="btn btn-secondary" style={{ padding: '6px 12px', width: 'auto' }} onClick={handlePrevMonth}>&lt;-</button>
+          <button className="btn btn-secondary" style={{ padding: '6px 12px', width: 'auto' }} onClick={handleNextMonth}>-&gt;</button>
+          
+          {isManager ? (
+            <>
+              <button className="btn btn-secondary" style={{ padding: '6px 12px', width: 'auto' }}>Date v</button>
+              <button className="btn btn-secondary" style={{ padding: '6px 12px', width: 'auto', backgroundColor: 'transparent' }}>Day</button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-secondary" style={{ padding: '6px 12px', width: 'auto' }}>
+                {currentDate.toLocaleDateString('en-US', { month: 'short' })} v
               </button>
-
-              <div className="punch-today-stats">
-                <div>
-                  <div className="punch-time-label">Login Time</div>
-                  <div className="punch-time-val" style={{ color: punchStatus?.login_time ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                    {punchStatus?.login_time || '--:--:--'}
-                  </div>
-                </div>
-                <div style={{ borderRight: '1px solid var(--border-color)' }}></div>
-                <div>
-                  <div className="punch-time-label">Logout Time</div>
-                  <div className="punch-time-val" style={{ color: punchStatus?.logout_time ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                    {punchStatus?.logout_time || '--:--:--'}
-                  </div>
-                </div>
+              <div style={{ padding: '6px 12px', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', fontSize: '0.85rem' }}>
+                Count of days present: <strong>{daysPresent}</strong>
               </div>
-            </div>
-          </div>
-        )}
-
-        <div className="dashboard-main" style={{ gridColumn: selectedEmpId !== user.emp_id ? '1 / -1' : undefined }}>
-          <div className="card">
-            <h3 style={{ marginBottom: '16px' }}>Attendance History</h3>
-            
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: '24px' }}>Loading historical logs...</div>
-            ) : (
-              <div className="table-container">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Punch In</th>
-                      <th>Punch Out</th>
-                      <th>Worked Hours</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.length > 0 ? (
-                      history.map((row, idx) => (
-                        <tr key={idx}>
-                          <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                            {new Date(row.attendance_date).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })}
-                          </td>
-                          <td style={{ color: 'var(--success)' }}>{row.login_time || '--:--:--'}</td>
-                          <td style={{ color: row.logout_time ? 'var(--accent)' : 'var(--text-muted)' }}>
-                            {row.logout_time || '--:--:--'}
-                          </td>
-                          <td style={{ fontWeight: '600' }}>
-                            {row.workedHours !== undefined ? `${row.workedHours} hr` : '--'}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="4" style={{ textAlign: 'center', padding: '24px' }}>No shift logs found for this user</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              <div style={{ padding: '6px 12px', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', fontSize: '0.85rem' }}>
+                Leaves count: <strong>{leavesCount}</strong>
               </div>
-            )}
-          </div>
+              <div style={{ padding: '6px 12px', border: '1px solid var(--border-color)', borderRadius: '4px', textAlign: 'center', fontSize: '0.85rem' }}>
+                Total working days: <strong>{totalWorkingDays}</strong>
+              </div>
+            </>
+          )}
         </div>
+
+        {/* Table Area */}
+        <div style={{ width: '100%', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              {/* Optional Subheader for Date */}
+              <tr>
+                <th colSpan="5" style={{ padding: '12px 16px', fontWeight: '500', borderBottom: '1px solid var(--border-color)' }}>
+                  {currentDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).replace(' ', ',')}
+                </th>
+              </tr>
+              <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                <th style={{ padding: '12px 16px', borderRight: '1px solid var(--border-color)', fontWeight: '600' }}>{isManager ? 'Emp' : 'Date'}</th>
+                <th style={{ padding: '12px 16px', borderRight: '1px solid var(--border-color)', fontWeight: '600' }}>Check In</th>
+                <th style={{ padding: '12px 16px', borderRight: '1px solid var(--border-color)', fontWeight: '600' }}>Check Out</th>
+                <th style={{ padding: '12px 16px', borderRight: '1px solid var(--border-color)', fontWeight: '600' }}>Work Hours</th>
+                <th style={{ padding: '12px 16px', fontWeight: '600' }}>Extra hours</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isManager ? (
+                /* Admin Rows */
+                adminTodayData.filter(d => d.emp_name.toLowerCase().includes(searchQuery.toLowerCase())).map((row, idx) => {
+                  const { work, extra } = calculateWorkHours(row.login_time, row.logout_time);
+                  return (
+                    <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '12px 16px', borderRight: '1px solid var(--border-color)' }}>[{row.emp_name}]</td>
+                      <td style={{ padding: '12px 16px', borderRight: '1px solid var(--border-color)' }}>{row.login_time ? row.login_time.slice(0, 5) : '--:--'}</td>
+                      <td style={{ padding: '12px 16px', borderRight: '1px solid var(--border-color)' }}>{row.logout_time ? row.logout_time.slice(0, 5) : '--:--'}</td>
+                      <td style={{ padding: '12px 16px', borderRight: '1px solid var(--border-color)' }}>{work}</td>
+                      <td style={{ padding: '12px 16px' }}>{extra}</td>
+                    </tr>
+                  );
+                })
+              ) : (
+                /* Employee Rows */
+                filteredHistory.map((row, idx) => {
+                  const { work, extra } = calculateWorkHours(row.login_time, row.logout_time);
+                  return (
+                    <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '12px 16px', borderRight: '1px solid var(--border-color)' }}>
+                        {new Date(row.attendance_date).toLocaleDateString('en-GB')}
+                      </td>
+                      <td style={{ padding: '12px 16px', borderRight: '1px solid var(--border-color)' }}>{row.login_time ? row.login_time.slice(0, 5) : '--:--'}</td>
+                      <td style={{ padding: '12px 16px', borderRight: '1px solid var(--border-color)' }}>{row.logout_time ? row.logout_time.slice(0, 5) : '--:--'}</td>
+                      <td style={{ padding: '12px 16px', borderRight: '1px solid var(--border-color)' }}>{work}</td>
+                      <td style={{ padding: '12px 16px' }}>{extra}</td>
+                    </tr>
+                  );
+                })
+              )}
+              {((isManager && adminTodayData.length === 0) || (!isManager && filteredHistory.length === 0)) && (
+                <tr>
+                  <td colSpan="5" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No attendance records found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
       </div>
     </div>
   );
