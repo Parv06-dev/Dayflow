@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import apiRequest from '../services/apiService';
+import SalaryPage from './SalaryPage';
 
-const ProfilePage = ({ user, onUserUpdate }) => {
+const ProfilePage = ({ user, onUserUpdate, readOnly = false }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -15,6 +16,7 @@ const ProfilePage = ({ user, onUserUpdate }) => {
   // Password Form state
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [activeTab, setActiveTab] = useState('profile');
 
   useEffect(() => {
     fetchProfileDetails();
@@ -133,10 +135,18 @@ const ProfilePage = ({ user, onUserUpdate }) => {
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
 
+      <div className="profile-tabs">
+        <button className={activeTab === 'profile' ? 'active' : ''} onClick={() => setActiveTab('profile')}>Profile</button>
+        {user.emp_role === 'ADMIN' && <button className={activeTab === 'salary' ? 'active' : ''} onClick={() => setActiveTab('salary')}>Salary Info</button>}
+      </div>
+
+      {activeTab === 'salary' && user.emp_role === 'ADMIN' ? <SalaryPage user={user} /> : (
+
       <div className="dashboard-layout">
         <div className="dashboard-main">
           <div className="card">
             <h3 style={{ marginBottom: '20px' }}>Personal Profile Info</h3>
+            {readOnly ? <div className="profile-read-only">Employee information is view-only from the directory.</div> : null}
             <form onSubmit={handleInfoSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-group">
                 <label className="form-label">Full Name</label>
@@ -145,6 +155,7 @@ const ProfilePage = ({ user, onUserUpdate }) => {
                   className="form-input"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  disabled={readOnly}
                   required
                 />
               </div>
@@ -157,6 +168,7 @@ const ProfilePage = ({ user, onUserUpdate }) => {
                     className="form-input"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    disabled={readOnly}
                     required
                   />
                 </div>
@@ -168,6 +180,7 @@ const ProfilePage = ({ user, onUserUpdate }) => {
                     maxLength="10"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
+                    disabled={readOnly}
                     required
                   />
                 </div>
@@ -196,14 +209,14 @@ const ProfilePage = ({ user, onUserUpdate }) => {
                 </div>
               </div>
 
-              <button type="submit" className="btn btn-primary" style={{ width: 'auto', marginTop: '10px' }}>
+              {!readOnly && <button type="submit" className="btn btn-primary" style={{ width: 'auto', marginTop: '10px' }}>
                 Save Profile Changes
-              </button>
+              </button>}
             </form>
           </div>
         </div>
 
-        <div className="dashboard-side">
+        {!readOnly && <div className="dashboard-side">
           <div className="card">
             <h3 style={{ marginBottom: '20px' }}>Update Password</h3>
             <form onSubmit={handlePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -243,8 +256,9 @@ const ProfilePage = ({ user, onUserUpdate }) => {
               Your account status is currently: <strong style={{ color: 'var(--success)' }}>{profile?.acc_status}</strong>. If you require department adjustments, please submit an HR query.
             </p>
           </div>
-        </div>
+        </div>}
       </div>
+      )}
     </div>
   );
 };

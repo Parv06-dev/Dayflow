@@ -296,6 +296,41 @@ button, input, select, textarea {
   border: 1px solid var(--border-color);
 }
 
+.header-punch-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.header-punch-button:hover:not(:disabled) {
+  border-color: var(--success);
+}
+
+.header-punch-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.header-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--error);
+  box-shadow: 0 0 0 3px var(--error-glow);
+}
+
+.header-status-dot.checked-in {
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-glow);
+}
+
 /* --- Main Content --- */
 .content-body {
   padding: 32px;
@@ -701,6 +736,87 @@ button, input, select, textarea {
   flex-direction: column;
   align-items: center;
   position: relative;
+  border: 1px solid var(--border-color);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  width: 100%;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.employee-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--primary);
+}
+
+.profile-menu-wrap {
+  position: relative;
+}
+
+.header-avatar {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.profile-menu {
+  position: absolute;
+  right: 0;
+  top: 48px;
+  z-index: 20;
+  min-width: 150px;
+  padding: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+
+.profile-menu button {
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.profile-menu button:hover {
+  background: var(--primary-glow);
+}
+
+.profile-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.profile-tabs button {
+  padding: 10px 16px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.profile-tabs button.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--primary);
+}
+
+.profile-read-only {
+  margin-bottom: 16px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
 }
 
 .emp-card-avatar {

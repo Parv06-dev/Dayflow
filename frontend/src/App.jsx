@@ -8,33 +8,60 @@ import AttendancePage from './views/AttendancePage';
 import LeavePage from './views/LeavePage';
 import SalaryPage from './views/SalaryPage';
 import ProfilePage from './views/ProfilePage';
+import apiRequest from './services/apiService';
 import './App.css';
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [activeView, setActiveView] = useState('login'); // login, register, dashboard, employees, attendance, leaves, salary, profile
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [profileTarget, setProfileTarget] = useState(null);
+  const [punchStatus, setPunchStatus] = useState(null);
+  const [punchLoading, setPunchLoading] = useState(false);
 
   useEffect(() => {
     // Check if user is already authenticated on mount
     const user = authService.getCurrentUser();
     if (user && authService.isAuthenticated()) {
       setCurrentUser(user);
-      setActiveView('dashboard');
+      setActiveView('employees');
     } else {
       setActiveView('login');
     }
   }, []);
 
+  useEffect(() => {
+    if (!currentUser) return;
+
+    apiRequest('/attendance/status')
+      .then(setPunchStatus)
+      .catch((error) => console.error('Error fetching header punch status:', error));
+  }, [currentUser]);
+
   const handleLoginSuccess = (user) => {
     setCurrentUser(user);
-    setActiveView('dashboard');
+    setActiveView('employees');
   };
 
   const handleLogout = () => {
     authService.logout();
     setCurrentUser(null);
     setActiveView('login');
+  };
+
+  const handleHeaderPunch = async () => {
+    setPunchLoading(true);
+    try {
+      const response = await apiRequest('/attendance/punch', { method: 'POST' });
+      const status = await apiRequest('/attendance/status');
+      setPunchStatus(status);
+      alert(response.message);
+    } catch (error) {
+      alert(error.message || 'Clock action failed');
+    } finally {
+      setPunchLoading(false);
+    }
   };
 
   const handleUserUpdate = (updatedUser) => {
@@ -58,15 +85,15 @@ function App() {
       case 'dashboard':
         return <DashboardPage user={currentUser} onViewChange={setActiveView} />;
       case 'employees':
-        return <EmployeesPage user={currentUser} />;
+        return <EmployeesPage user={currentUser} onViewProfile={(employee) => { setProfileTarget(employee); setActiveView('profile'); }} />;
       case 'attendance':
         return <AttendancePage user={currentUser} />;
       case 'leaves':
         return <LeavePage user={currentUser} />;
       case 'salary':
-        return <SalaryPage user={currentUser} />;
+        return currentUser.emp_role === 'ADMIN' ? <SalaryPage user={currentUser} /> : <EmployeesPage user={currentUser} />;
       case 'profile':
-        return <ProfilePage user={currentUser} onUserUpdate={handleUserUpdate} />;
+        return <ProfilePage user={profileTarget || currentUser} onUserUpdate={handleUserUpdate} readOnly={Boolean(profileTarget)} />;
       default:
         return <DashboardPage user={currentUser} onViewChange={setActiveView} />;
     }
@@ -126,6 +153,7 @@ function App() {
           <a
             className={`sidebar-item ${activeView === 'salary' ? 'active' : ''}`}
             onClick={() => { setActiveView('salary'); setIsSidebarOpen(false); }}
+            style={{ display: currentUser.emp_role === 'ADMIN' ? undefined : 'none' }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
             Payroll & Payslips
@@ -133,7 +161,7 @@ function App() {
 
           <a
             className={`sidebar-item ${activeView === 'profile' ? 'active' : ''}`}
-            onClick={() => { setActiveView('profile'); setIsSidebarOpen(false); }}
+            onClick={() => { setProfileTarget(null); setActiveView('profile'); setIsSidebarOpen(false); }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             My Profile
@@ -177,6 +205,25 @@ function App() {
           <div className="header-actions">
             <div className="header-date">
               📅 {new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+            </div>
+            <button
+              className="header-punch-button"
+              onClick={handleHeaderPunch}
+              disabled={punchLoading}
+            >
+              <span className={`header-status-dot ${punchStatus?.punchedIn && !punchStatus?.logout_time ? 'checked-in' : ''}`} />
+              {punchLoading ? 'Updating...' : punchStatus?.punchedIn && !punchStatus?.logout_time ? 'Check Out' : 'Check In'}
+            </button>
+            <div className="profile-menu-wrap">
+              <button className="header-avatar" onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} aria-label="Open profile menu">
+                {currentUser.emp_name.charAt(0)}
+              </button>
+              {isProfileMenuOpen && (
+                <div className="profile-menu">
+                  <button onClick={() => { setProfileTarget(null); setActiveView('profile'); setIsProfileMenuOpen(false); }}>My Profile</button>
+                  <button onClick={handleLogout}>Log Out</button>
+                </div>
+              )}
             </div>
           </div>
         </header>

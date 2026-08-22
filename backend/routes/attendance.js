@@ -30,12 +30,14 @@ router.post('/punch', authenticateToken, async (req, res) => {
   try {
     // Check if record exists for today
     const [existing] = await db.query(
-      'SELECT * FROM Attendance WHERE emp_id = ? AND attendance_date = ?',
+      'SELECT * FROM Attendance WHERE emp_id = ? AND attendance_date = ? ORDER BY attendance_id DESC LIMIT 1',
       [empId, today]
     );
 
-    if (existing.length === 0) {
-      // Clock In (Insert new record)
+    const record = existing[0];
+
+    if (!record || record.logout_time !== null) {
+      // Clock in a new shift when no shift is open.
       await db.query(
         'INSERT INTO Attendance (emp_id, attendance_date, login_time, logout_time) VALUES (?, ?, ?, NULL)',
         [empId, today, nowTime]
@@ -47,11 +49,7 @@ router.post('/punch', authenticateToken, async (req, res) => {
         logout_time: null
       });
     } else {
-      // Clock Out (Update existing record)
-      const record = existing[0];
-      
-      // If already clocked out, allow updating or reject?
-      // Updating is fine, as it logs the latest departure time.
+      // Clock out the currently open shift.
       await db.query(
         'UPDATE Attendance SET logout_time = ? WHERE attendance_id = ?',
         [nowTime, record.attendance_id]
@@ -77,7 +75,7 @@ router.get('/status', authenticateToken, async (req, res) => {
 
   try {
     const [rows] = await db.query(
-      'SELECT * FROM Attendance WHERE emp_id = ? AND attendance_date = ?',
+      'SELECT * FROM Attendance WHERE emp_id = ? AND attendance_date = ? ORDER BY attendance_id DESC LIMIT 1',
       [empId, today]
     );
 

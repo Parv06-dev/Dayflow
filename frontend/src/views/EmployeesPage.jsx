@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import apiRequest from '../services/apiService';
 
-const EmployeesPage = ({ user }) => {
+const EmployeesPage = ({ user, onViewProfile }) => {
   const [employees, setEmployees] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -230,7 +230,16 @@ const EmployeesPage = ({ user }) => {
         <div className="employee-grid">
           {employees.length > 0 ? (
             employees.map((emp) => (
-              <div key={emp.emp_id} className="card employee-card">
+              <div
+                key={emp.emp_id}
+                className="card employee-card"
+                onClick={() => onViewProfile(emp)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') onViewProfile(emp);
+                }}
+                role="button"
+                tabIndex="0"
+              >
                 <div className="user-avatar emp-card-avatar">
                   {emp.emp_name.charAt(0)}
                 </div>
@@ -251,12 +260,13 @@ const EmployeesPage = ({ user }) => {
                 </div>
 
                 {isManager && (
-                  <div className="employee-card-actions">
-                    <button className="btn btn-secondary" style={{ padding: '8px 12px', fontSize: '0.8rem' }} onClick={() => handleEditClick(emp)}>
+                  <div className="employee-card-actions" onClick={(event) => event.stopPropagation()}>
+                    <button className="btn btn-secondary" style={{ padding: '8px 12px', fontSize: '0.8rem' }} onClick={() => handleEditClick(emp)} type="button">
                       Edit
                     </button>
 
                     <button
+                      type="button"
                       className={`btn ${emp.acc_status === 'Active' ? 'btn-secondary' : 'btn-success'}`}
                       style={{ padding: '8px 12px', fontSize: '0.8rem', color: emp.acc_status === 'Active' ? 'var(--error)' : 'white' }}
                       onClick={() => handleToggleStatus(emp)}
@@ -265,7 +275,7 @@ const EmployeesPage = ({ user }) => {
                     </button>
 
                     {isAdminUser && (
-                      <button className="btn btn-danger" style={{ padding: '8px 12px', fontSize: '0.8rem' }} onClick={() => handleDelete(emp.emp_id)}>
+                      <button type="button" className="btn btn-danger" style={{ padding: '8px 12px', fontSize: '0.8rem' }} onClick={() => handleDelete(emp.emp_id)}>
                         Delete
                       </button>
                     )}
