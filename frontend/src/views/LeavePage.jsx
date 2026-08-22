@@ -153,8 +153,12 @@ const LeavePage = ({ user }) => {
 
   // Dynamic Days Available calculation
   const computeAvailableDays = (type, totalQuota) => {
+    const normalizedType = type.toLowerCase();
     const used = leaves
-      .filter(l => (l.leave_type || 'Paid time Off') === type && l.approved_status === 'Approved')
+      .filter(l => {
+        const lt = (l.leave_type || 'Paid time Off').toLowerCase();
+        return lt === normalizedType && l.approved_status === 'Approved';
+      })
       .reduce((acc, l) => {
         const f = new Date(l.from_date);
         const t = new Date(l.to_date);

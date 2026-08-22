@@ -196,6 +196,50 @@ router.get('/today', authenticateToken, isAdminOrHR, async (req, res) => {
   }
 });
 
+// Fetch 7-Day Weekly Attendance Trend (Admin/HR Only) — tenant-scoped
+router.get('/weekly-trend', authenticateToken, isAdminOrHR, async (req, res) => {
+  const companyId = req.user.company_id;
+
+  try {
+    // Get last 7 days attendance counts grouped by date
+    const [rows] = await db.query(
+      `SELECT a.attendance_date, COUNT(DISTINCT a.emp_id) as present_count
+       FROM Attendance a
+       JOIN Employee e ON a.emp_id = e.emp_id
+       WHERE e.company_id = ?
+         AND a.attendance_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+       GROUP BY a.attendance_date
+       ORDER BY a.attendance_date ASC`,
+      [companyId]
+    );
+
+    // Format results for the 7 days
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const trendMap = new Map(rows.map(r => [
+      new Date(r.attendance_date).toISOString().split('T')[0],
+      r.present_count
+    ]));
+
+    const result = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const dayName = dayNames[d.getDay()];
+      result.push({
+        day: dayName,
+        date: dateStr,
+        present: trendMap.get(dateStr) || 0
+      });
+    }
+
+    return res.json(result);
+  } catch (error) {
+    console.error('Fetch weekly trend error:', error);
+    return res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
 // Fetch Single Employee's Attendance History (Self or Admin/HR) — tenant-scoped
 router.get('/employee/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;

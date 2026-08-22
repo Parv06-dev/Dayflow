@@ -152,7 +152,7 @@ router.get('/', authenticateToken, async (req, res) => {
         emp_name: emp.emp_name,
         emp_department: emp.emp_department,
         emp_role: emp.emp_role,
-        company_name: emp.company_name || 'Dayflow Technologies',
+        company_name: emp.company_name || null,
         base_salary: baseSalary,
         monthly_wage: baseSalary,
         basic_salary: basicSalary,

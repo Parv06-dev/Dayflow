@@ -161,7 +161,11 @@ const ProfilePage = ({ user, onUserUpdate, readOnly = false }) => {
               width: '100px',
               height: '100px',
               borderRadius: '50%',
-              backgroundColor: '#582c2c',
+              background: (() => {
+                const name = formData.emp_name || user.emp_name || 'U';
+                const hue = (name.charCodeAt(0) * 47) % 360;
+                return `linear-gradient(135deg, hsl(${hue}, 65%, 40%), hsl(${(hue + 60) % 360}, 70%, 55%))`;
+              })(),
               border: '2px solid var(--border-color)',
               display: 'flex',
               alignItems: 'center',
@@ -170,7 +174,7 @@ const ProfilePage = ({ user, onUserUpdate, readOnly = false }) => {
               color: '#fff',
               fontWeight: '700'
             }}>
-              {formData.emp_name ? formData.emp_name.charAt(0).toUpperCase() : 'U'}
+              {(formData.emp_name || user.emp_name || 'U').charAt(0).toUpperCase()}
             </div>
             <div title="Edit Photo" style={{
               position: 'absolute',
