@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import apiRequest from '../services/apiService';
+import useAttendance from '../services/attendanceService';
 
 const DashboardPage = ({ user, onViewChange }) => {
   const [stats, setStats] = useState(null);
-  const [punchStatus, setPunchStatus] = useState(null);
   const [leavesCount, setLeavesCount] = useState({ total: 0, pending: 0, approved: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const isManager = user.emp_role === 'ADMIN' || user.emp_role === 'HR';
+  const { status: punchStatus, checkIn, checkOut, loading: punchLoading } = useAttendance(!isManager);
 
   useEffect(() => {
     fetchDashboardData();
@@ -37,10 +38,6 @@ const DashboardPage = ({ user, onViewChange }) => {
           punches: attendanceData.punches
         });
       } else {
-        // Fetch personal punch status for standard employee
-        const status = await apiRequest('/attendance/status');
-        setPunchStatus(status);
-
         // Fetch personal leaves
         const leaves = await apiRequest('/leaves');
         const pending = leaves.filter(l => l.approved_status === 'Pending').length;
@@ -62,10 +59,8 @@ const DashboardPage = ({ user, onViewChange }) => {
 
   const handlePunch = async () => {
     try {
-      const punchRes = await apiRequest('/attendance/punch', { method: 'POST' });
-      // Refresh status
-      const status = await apiRequest('/attendance/status');
-      setPunchStatus(status);
+      const isCheckedIn = punchStatus?.punchedIn && !punchStatus?.logout_time;
+      const punchRes = isCheckedIn ? await checkOut() : await checkIn();
       alert(punchRes.message);
     } catch (err) {
       alert(err.message || 'Clock action failed');
@@ -221,6 +216,7 @@ const DashboardPage = ({ user, onViewChange }) => {
               <button
                 className={`punch-circle-btn ${punchStatus?.punchedIn && !punchStatus?.logout_time ? 'punched' : ''}`}
                 onClick={handlePunch}
+                disabled={punchLoading}
               >
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                 {punchStatus?.punchedIn && !punchStatus?.logout_time ? 'Clock Out' : 'Clock In'}

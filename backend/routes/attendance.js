@@ -24,6 +24,7 @@ const getLocalTimeString = () => {
 // Clock In / Clock Out Toggle (Authenticated users)
 router.post('/punch', authenticateToken, async (req, res) => {
   const empId = req.user.emp_id;
+  const requestedAction = req.body.action && req.body.action.toUpperCase();
   const today = getLocalDateString();
   const nowTime = getLocalTimeString();
 
@@ -35,9 +36,10 @@ router.post('/punch', authenticateToken, async (req, res) => {
     );
 
     const record = existing[0];
+    const action = requestedAction || (record && !record.logout_time ? 'OUT' : 'IN');
 
-    if (!record || record.logout_time !== null) {
-      // Clock in a new shift when no shift is open.
+    if (action === 'IN' && (!record || record.logout_time)) {
+      // Clock In (Insert new record)
       await db.query(
         'INSERT INTO Attendance (emp_id, attendance_date, login_time, logout_time) VALUES (?, ?, ?, NULL)',
         [empId, today, nowTime]
@@ -48,8 +50,8 @@ router.post('/punch', authenticateToken, async (req, res) => {
         login_time: nowTime,
         logout_time: null
       });
-    } else {
-      // Clock out the currently open shift.
+    } else if (action === 'OUT' && record && !record.logout_time) {
+      // Clock Out (Update existing record)
       await db.query(
         'UPDATE Attendance SET logout_time = ? WHERE attendance_id = ?',
         [nowTime, record.attendance_id]
@@ -61,6 +63,8 @@ router.post('/punch', authenticateToken, async (req, res) => {
         login_time: record.login_time,
         logout_time: nowTime
       });
+    } else {
+      return res.status(409).json({ message: action === 'IN' ? 'You are already checked in.' : 'You are not checked in.' });
     }
   } catch (error) {
     console.error('Punch error:', error);
@@ -100,25 +104,28 @@ router.get('/today', authenticateToken, isAdminOrHR, async (req, res) => {
   const today = getLocalDateString();
 
   try {
-    // 1. Get all employees
+    // 1. Get all active employees
     const [employees] = await db.query('SELECT emp_id, emp_name, emp_department, emp_role FROM Employee');
     
-    // 2. Get today's attendance records
+    // 2. Get today's attendance records (group by emp_id taking earliest login & latest logout)
     const [attendance] = await db.query(
-      'SELECT a.*, e.emp_name, e.emp_department, e.emp_role FROM Attendance a JOIN Employee e ON a.emp_id = e.emp_id WHERE a.attendance_date = ?',
+      `SELECT emp_id, MIN(login_time) as login_time, MAX(logout_time) as logout_time 
+       FROM Attendance 
+       WHERE attendance_date = ? 
+       GROUP BY emp_id`,
       [today]
     );
 
     // 3. Get today's approved leaves
     const [leaves] = await db.query(
-      "SELECT emp_id FROM Leave_Request WHERE approved_status = 'Approved' AND ? BETWEEN from_date AND to_date",
+      "SELECT DISTINCT emp_id FROM Leave_Request WHERE approved_status = 'Approved' AND ? BETWEEN from_date AND to_date",
       [today]
     );
 
     const presentMap = new Map(attendance.map(a => [a.emp_id, a]));
     const leaveSet = new Set(leaves.map(l => l.emp_id));
 
-    let presentCount = attendance.length;
+    let presentCount = presentMap.size;
     let leaveCount = 0;
     let absentCount = 0;
 
@@ -175,7 +182,11 @@ router.get('/employee/:id', authenticateToken, async (req, res) => {
 
   try {
     const [rows] = await db.query(
-      'SELECT * FROM Attendance WHERE emp_id = ? ORDER BY attendance_date DESC',
+      `SELECT attendance_date, MIN(login_time) as login_time, MAX(logout_time) as logout_time 
+       FROM Attendance 
+       WHERE emp_id = ? 
+       GROUP BY attendance_date 
+       ORDER BY attendance_date DESC`,
       [id]
     );
 
@@ -186,8 +197,8 @@ router.get('/employee/:id', authenticateToken, async (req, res) => {
         const [linH, linM, linS] = r.login_time.split(':').map(Number);
         const [loutH, loutM, loutS] = r.logout_time.split(':').map(Number);
 
-        const loginSec = linH * 3600 + linM * 60 + linS;
-        const logoutSec = loutH * 3600 + loutM * 60 + loutS;
+        const loginSec = linH * 3600 + (linM || 0) * 60 + (linS || 0);
+        const logoutSec = loutH * 3600 + (loutM || 0) * 60 + (loutS || 0);
 
         workedHours = Math.max(0, (logoutSec - loginSec) / 3600);
       }

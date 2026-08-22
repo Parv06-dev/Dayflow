@@ -5,17 +5,19 @@ const { authenticateToken, isAdminOrHR } = require('../middleware/auth');
 
 // Apply for leave (Authenticated users)
 router.post('/', authenticateToken, async (req, res) => {
-  const { from_date, to_date, reason } = req.body;
+  const { from_date, to_date, reason, leave_type } = req.body;
   const empId = req.user.emp_id;
 
   if (!from_date || !to_date || !reason) {
     return res.status(400).json({ message: 'From date, to date, and reason are required' });
   }
 
+  const type = leave_type || 'Paid time Off';
+
   try {
     await db.query(
-      'INSERT INTO Leave_Request (emp_id, from_date, to_date, reason, approved_status, approved_by) VALUES (?, ?, ?, ?, ?, NULL)',
-      [empId, from_date, to_date, reason, 'Pending']
+      'INSERT INTO Leave_Request (emp_id, leave_type, from_date, to_date, reason, approved_status, approved_by) VALUES (?, ?, ?, ?, ?, ?, NULL)',
+      [empId, type, from_date, to_date, reason, 'Pending']
     );
     return res.status(201).json({ message: 'Leave request submitted successfully' });
   } catch (error) {
@@ -78,12 +80,14 @@ router.get('/pending', authenticateToken, isAdminOrHR, async (req, res) => {
 // Approve or Reject a Leave (Admin/HR Only)
 router.put('/:id', authenticateToken, isAdminOrHR, async (req, res) => {
   const { id } = req.params;
-  const { approved_status } = req.body;
+  const statusInput = req.body.status || req.body.approved_status;
   const managerId = req.user.emp_id;
 
-  if (!approved_status || !['Approved', 'Rejected'].includes(approved_status)) {
-    return res.status(400).json({ message: 'approved_status must be either "Approved" or "Rejected"' });
+  if (!statusInput || !['Approved', 'Rejected', 'Refused'].includes(statusInput)) {
+    return res.status(400).json({ message: 'Status must be either "Approved" or "Rejected"' });
   }
+
+  const finalStatus = statusInput === 'Refused' ? 'Rejected' : statusInput;
 
   try {
     const [existing] = await db.query('SELECT * FROM Leave_Request WHERE leave_id = ?', [id]);
@@ -91,17 +95,12 @@ router.put('/:id', authenticateToken, isAdminOrHR, async (req, res) => {
       return res.status(404).json({ message: 'Leave request not found' });
     }
 
-    const leave = existing[0];
-    if (leave.approved_status !== 'Pending') {
-      return res.status(400).json({ message: 'This leave request has already been processed' });
-    }
-
     await db.query(
       'UPDATE Leave_Request SET approved_status = ?, approved_by = ? WHERE leave_id = ?',
-      [approved_status, managerId, id]
+      [finalStatus, managerId, id]
     );
 
-    return res.json({ message: `Leave request successfully ${approved_status.toLowerCase()}` });
+    return res.json({ message: `Leave request successfully ${finalStatus.toLowerCase()}` });
   } catch (error) {
     console.error('Approve/Reject leave error:', error);
     return res.status(500).json({ message: 'Internal Server Error' });
