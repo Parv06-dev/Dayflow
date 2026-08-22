@@ -88,10 +88,25 @@ async function initDB() {
       FOREIGN KEY (emp_id)      REFERENCES Employee(emp_id) ON DELETE CASCADE,
       FOREIGN KEY (approved_by) REFERENCES Employee(emp_id) ON DELETE SET NULL
     );
+
+    CREATE TABLE IF NOT EXISTS Salary (
+      salary_id              INT AUTO_INCREMENT PRIMARY KEY,
+      emp_id                 INT NOT NULL,
+      Monthly_Wage           DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      Basic_Salary           DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      HRA                    DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      St_Allowance           DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      Performance_Bonus      DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      Leave_Travel_Allowance DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      fixed_Allowance        DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      Provident_fund         DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      Tax_Deduction          DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      FOREIGN KEY (emp_id) REFERENCES Employee(emp_id) ON DELETE CASCADE
+    );
   `);
   console.log('✅ All tables verified / created.');
 
-  // Safe migration for existing databases created before new columns were added
+  // Safe migration for existing databases created before new columns/tables were added
   try {
     await initConn.query(`ALTER TABLE Employee ADD COLUMN login_id VARCHAR(50) UNIQUE NULL;`);
   } catch (e) {}

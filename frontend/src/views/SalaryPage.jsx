@@ -14,6 +14,22 @@ const SalaryPage = ({ user }) => {
   // Payslip detail modal
   const [selectedPayslip, setSelectedPayslip] = useState(null);
 
+  // Salary Structure Edit Modal state for HR / Admin
+  const [editingEmployee, setEditingEmployee] = useState(null);
+  const [editForm, setEditForm] = useState({
+    Monthly_Wage: '',
+    Basic_Salary: '',
+    HRA: '',
+    St_Allowance: '',
+    Performance_Bonus: '',
+    Leave_Travel_Allowance: '',
+    fixed_Allowance: '',
+    Provident_fund: '',
+    Tax_Deduction: ''
+  });
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState('');
+
   const isManager = user.emp_role === 'ADMIN' || user.emp_role === 'HR';
 
   const monthsList = [
@@ -61,52 +77,83 @@ const SalaryPage = ({ user }) => {
     window.print();
   };
 
-  return (
-    <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
-      {/* Hide controls during standard print mode */}
-      <div className="no-print" style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '1.75rem', marginBottom: '6px' }}>Payroll & Payslips</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-          {isManager 
-            ? 'Generate, review, and print payslips for all staff members.' 
-            : 'Access your monthly earnings breakdown and download printable payslips.'
-          }
-        </p>
-      </div>
+  const openEditModal = (sal) => {
+    setEditingEmployee(sal);
+    setSaveSuccess('');
+    setEditForm({
+      Monthly_Wage: sal.monthly_wage || sal.base_salary,
+      Basic_Salary: sal.basic_salary || (sal.base_salary * 0.5),
+      HRA: sal.hra || (sal.base_salary * 0.2),
+      St_Allowance: sal.st_allowance || (sal.base_salary * 0.15),
+      Performance_Bonus: sal.performance_bonus || (sal.base_salary * 0.05),
+      Leave_Travel_Allowance: sal.leave_travel_allowance || (sal.base_salary * 0.05),
+      fixed_Allowance: sal.fixed_allowance || (sal.base_salary * 0.05),
+      Provident_fund: sal.provident_fund || (sal.base_salary * 0.06),
+      Tax_Deduction: sal.tax_deduction || (sal.base_salary * 0.04)
+    });
+  };
 
-      <div className="card no-print" style={{ marginBottom: '24px', padding: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ fontWeight: '600', fontSize: '0.9rem' }}>Month:</label>
+  const handleSaveSalaryStructure = async (e) => {
+    e.preventDefault();
+    setSaveLoading(true);
+    setError('');
+    setSaveSuccess('');
+
+    try {
+      await apiRequest(`/salary/${editingEmployee.emp_id}`, {
+        method: 'PUT',
+        body: JSON.stringify(editForm)
+      });
+
+      setSaveSuccess('Salary structure and tax deductions updated successfully!');
+      setTimeout(() => {
+        setEditingEmployee(null);
+        fetchSalaries();
+      }, 1500);
+    } catch (err) {
+      setError(err.message || 'Failed to update salary structure');
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      {/* Top Filter Header */}
+      <div className="card-glass no-print" style={{ marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <h3>Payroll & Payslips</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
+              {isManager 
+                ? 'Manage employee salary components, tax deductions, and download payslips.' 
+                : 'View and download your monthly compensation breakdown.'}
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px' }}>
             <select
               className="form-input"
               style={{ width: 'auto' }}
               value={selectedMonth}
-              onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
             >
-              {monthsList.map(m => (
+              {monthsList.map((m) => (
                 <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </select>
-          </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ fontWeight: '600', fontSize: '0.9rem' }}>Year:</label>
             <select
               className="form-input"
               style={{ width: 'auto' }}
               value={selectedYear}
-              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
             >
-              {yearsList.map(y => (
+              {yearsList.map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
           </div>
-
-          <button className="btn btn-secondary" style={{ width: 'auto' }} onClick={fetchSalaries}>
-            Recalculate
-          </button>
         </div>
       </div>
 
@@ -147,13 +194,22 @@ const SalaryPage = ({ user }) => {
                           <td>{sal.leave_days}</td>
                           <td style={{ fontWeight: '600', color: 'var(--success)' }}>₹{sal.net_salary.toLocaleString()}</td>
                           <td>
-                            <button
-                              className="btn btn-primary"
-                              style={{ width: 'auto', padding: '6px 12px', fontSize: '0.8rem' }}
-                              onClick={() => setSelectedPayslip(sal)}
-                            >
-                              Open Payslip
-                            </button>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                className="btn btn-primary"
+                                style={{ width: 'auto', padding: '6px 12px', fontSize: '0.8rem' }}
+                                onClick={() => setSelectedPayslip(sal)}
+                              >
+                                Open Payslip
+                              </button>
+                              <button
+                                className="btn btn-secondary"
+                                style={{ width: 'auto', padding: '6px 12px', fontSize: '0.8rem' }}
+                                onClick={() => openEditModal(sal)}
+                              >
+                                ✏️ Edit Structure
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -173,7 +229,11 @@ const SalaryPage = ({ user }) => {
             <div className="payslip-box">
               <div className="payslip-header">
                 <div>
-                  <div className="payslip-title">DAYFLOW TECHNOLOGIES</div>
+                  <div className="payslip-title">
+                    {(selectedPayslip.company_name && selectedPayslip.company_name !== 'Dayflow Technologies') 
+                      ? selectedPayslip.company_name 
+                      : (user?.company_name || 'Odoo India')}
+                  </div>
                   <p style={{ fontSize: '0.8rem', marginTop: '4px', letterSpacing: '0.05em' }}>EMPLOYEE PAYROLL RECEIPT</p>
                 </div>
                 <div style={{ textAlign: 'right' }}>
@@ -226,12 +286,41 @@ const SalaryPage = ({ user }) => {
                 </thead>
                 <tbody>
                   <tr>
-                    <td>Basic / Base Salary ({selectedPayslip.emp_role})</td>
-                    <td className="text-right" style={{ color: 'var(--text-primary)' }}>₹{selectedPayslip.base_salary.toLocaleString()}</td>
+                    <td>Basic Salary</td>
+                    <td className="text-right" style={{ color: 'var(--text-primary)' }}>₹{(selectedPayslip.basic_salary).toLocaleString()}</td>
                     <td className="text-right">--</td>
                   </tr>
                   <tr>
-                    <td>Deductions ({selectedPayslip.absent_days} Absent days)</td>
+                    <td>House Rent Allowance (HRA)</td>
+                    <td className="text-right" style={{ color: 'var(--text-primary)' }}>₹{(selectedPayslip.hra).toLocaleString()}</td>
+                    <td className="text-right">--</td>
+                  </tr>
+                  <tr>
+                    <td>Special Allowance</td>
+                    <td className="text-right" style={{ color: 'var(--text-primary)' }}>₹{(selectedPayslip.st_allowance).toLocaleString()}</td>
+                    <td className="text-right">--</td>
+                  </tr>
+                  <tr>
+                    <td>Performance Bonus & LTA</td>
+                    <td className="text-right" style={{ color: 'var(--text-primary)' }}>₹{((selectedPayslip.performance_bonus) + (selectedPayslip.leave_travel_allowance)).toLocaleString()}</td>
+                    <td className="text-right">--</td>
+                  </tr>
+                  <tr>
+                    <td>Provident Fund (PF)</td>
+                    <td className="text-right">--</td>
+                    <td className="text-right" style={{ color: 'var(--error)' }}>
+                      ₹{(selectedPayslip.provident_fund).toLocaleString()}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Tax Deduction</td>
+                    <td className="text-right">--</td>
+                    <td className="text-right" style={{ color: 'var(--error)' }}>
+                      ₹{(selectedPayslip.tax_deduction).toLocaleString()}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Attendance Deductions ({selectedPayslip.absent_days} Unapproved Absent days - Capped)</td>
                     <td className="text-right">--</td>
                     <td className="text-right" style={{ color: 'var(--error)' }}>
                       ₹{selectedPayslip.deductions.toLocaleString()}
@@ -263,6 +352,113 @@ const SalaryPage = ({ user }) => {
             </div>
           )}
         </>
+      )}
+
+      {/* --- HR/Admin Edit Salary Modal --- */}
+      {editingEmployee && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '600px' }}>
+            <div className="modal-header">
+              <h3>Configure Salary Structure — {editingEmployee.emp_name}</h3>
+              <button className="modal-close" onClick={() => setEditingEmployee(null)}>✕</button>
+            </div>
+
+            {saveSuccess && <div className="alert alert-success">{saveSuccess}</div>}
+
+            <form onSubmit={handleSaveSalaryStructure}>
+              <div className="form-group">
+                <label className="form-label">Monthly Base Wage (₹)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={editForm.Monthly_Wage}
+                  onChange={(e) => setEditForm({ ...editForm, Monthly_Wage: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Basic Salary (₹)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editForm.Basic_Salary}
+                    onChange={(e) => setEditForm({ ...editForm, Basic_Salary: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">House Rent Allowance - HRA (₹)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editForm.HRA}
+                    onChange={(e) => setEditForm({ ...editForm, HRA: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Special Allowance (₹)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editForm.St_Allowance}
+                    onChange={(e) => setEditForm({ ...editForm, St_Allowance: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Performance Bonus (₹)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editForm.Performance_Bonus}
+                    onChange={(e) => setEditForm({ ...editForm, Performance_Bonus: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Provident Fund Deduction - PF (₹)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editForm.Provident_fund}
+                    onChange={(e) => setEditForm({ ...editForm, Provident_fund: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Tax Deduction (₹)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editForm.Tax_Deduction}
+                    onChange={(e) => setEditForm({ ...editForm, Tax_Deduction: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="modal-actions" style={{ marginTop: '20px', display: 'flex', gap: '12px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setEditingEmployee(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={saveLoading}
+                >
+                  {saveLoading ? 'Saving...' : 'Save Salary Structure'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
