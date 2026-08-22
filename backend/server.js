@@ -102,7 +102,35 @@ async function initDB() {
       fixed_Allowance        DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
       Provident_fund         DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
       Tax_Deduction          DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      working_days_per_week  INT NOT NULL DEFAULT 5,
       FOREIGN KEY (emp_id) REFERENCES Employee(emp_id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS Payroll_Record (
+      payroll_id             INT AUTO_INCREMENT PRIMARY KEY,
+      emp_id                 INT NOT NULL,
+      month                  INT NOT NULL,
+      year                   INT NOT NULL,
+      base_salary            DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      basic_salary           DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      hra                    DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      st_allowance           DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      performance_bonus      DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      leave_travel_allowance DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      fixed_allowance        DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      provident_fund         DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      tax_deduction          DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      worked_days            INT NOT NULL DEFAULT 0,
+      leave_days             INT NOT NULL DEFAULT 0,
+      paid_leave_days        INT NOT NULL DEFAULT 0,
+      unpaid_leave_days      INT NOT NULL DEFAULT 0,
+      payable_days           INT NOT NULL DEFAULT 0,
+      total_working_days     INT NOT NULL DEFAULT 0,
+      deductions             DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      net_salary             DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (emp_id) REFERENCES Employee(emp_id) ON DELETE CASCADE,
+      UNIQUE KEY uidx_payroll_month_year (emp_id, month, year)
     );
   `);
   console.log('✅ All tables verified / created.');
@@ -129,6 +157,7 @@ async function initDB() {
   try { await initConn.query(`ALTER TABLE Leave_Request ADD COLUMN leave_type VARCHAR(50) DEFAULT 'Paid time Off';`); } catch (e) {}
   try { await initConn.query(`ALTER TABLE Login ADD COLUMN login_id VARCHAR(50) NULL;`); } catch (e) {}
   try { await initConn.query(`ALTER TABLE Login ADD COLUMN is_temp_pass BOOLEAN DEFAULT FALSE;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Salary ADD COLUMN working_days_per_week INT NOT NULL DEFAULT 5;`); } catch (e) {}
 
   // ─── Tenant-isolation schema migration ──────────────────────────
   await initConn.query(`INSERT IGNORE INTO Company (company_id, company_name, company_code) VALUES (1, 'Default Company', 'DC');`);

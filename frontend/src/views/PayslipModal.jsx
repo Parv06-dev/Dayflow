@@ -63,8 +63,7 @@ const PayslipModal = ({ slip, user, monthLabel, onClose, onPrint }) => {
   const deductionRows = [
     { label: 'Provident Fund (PF)',                  value: slip.provident_fund },
     { label: 'Income Tax / TDS',                     value: slip.tax_deduction },
-    { label: `Attendance Deduction (${slip.absent_days} absent day${slip.absent_days !== 1 ? 's' : ''}, capped)`,
-                                                     value: slip.deductions },
+    { label: `Attendance Deduction (Lost Earnings)`, value: slip.deductions },
   ];
 
   return (
@@ -112,9 +111,8 @@ const PayslipModal = ({ slip, user, monthLabel, onClose, onPrint }) => {
             <MetaRow label="Department"         value={slip.emp_department} />
             <MetaRow label="Employee ID"        value={`#${slip.emp_id}`} />
             <MetaRow label="Designation"        value={slip.emp_role} />
-            <MetaRow label="Worked Days"        value={`${slip.worked_days} / 30`} />
-            <MetaRow label="Approved Leave Days" value={slip.leave_days} />
-            <MetaRow label="Absent Days"        value={slip.absent_days} />
+            <MetaRow label="Payable Days"       value={`${slip.payable_days} / ${slip.total_working_days}`} />
+            <MetaRow label="Leaves Taken"       value={`${slip.leave_days} (${slip.paid_leave_days} Paid)`} />
             <MetaRow label="Date of Issue"      value={issuedOn} />
           </div>
 
