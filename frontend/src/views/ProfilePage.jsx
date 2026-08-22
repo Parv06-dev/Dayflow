@@ -8,15 +8,34 @@ const ProfilePage = ({ user, onUserUpdate, readOnly = false }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Info Form state
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [activeTab, setActiveTab] = useState('private'); // 'resume', 'private', 'salary', 'security'
 
-  // Password Form state
+  // Extended Wireframe Form State
+  const [formData, setFormData] = useState({
+    emp_name: '',
+    job_position: '',
+    emp_email: '',
+    emp_phno: '',
+    company_name: '',
+    emp_department: '',
+    location: '',
+    dob: '',
+    residing_address: '',
+    nationality: 'Indian',
+    personal_email: '',
+    gender: 'Male',
+    marital_status: 'Single',
+    date_of_joining: '',
+    bank_account_no: '',
+    bank_name: '',
+    ifsc_code: '',
+    pan_no: '',
+    uan_no: ''
+  });
+
+  // Password state
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [activeTab, setActiveTab] = useState('profile');
 
   useEffect(() => {
     fetchProfileDetails();
@@ -27,9 +46,27 @@ const ProfilePage = ({ user, onUserUpdate, readOnly = false }) => {
     try {
       const data = await apiRequest(`/employees/${user.emp_id}`);
       setProfile(data);
-      setName(data.emp_name);
-      setEmail(data.emp_email);
-      setPhone(data.emp_phno);
+      setFormData({
+        emp_name: data.emp_name || '',
+        job_position: data.job_position || data.emp_role || '',
+        emp_email: data.emp_email || '',
+        emp_phno: data.emp_phno || '',
+        company_name: data.company_name || 'Odoo India',
+        emp_department: data.emp_department || '',
+        location: data.location || 'India',
+        dob: data.dob ? data.dob.substring(0, 10) : '',
+        residing_address: data.residing_address || '',
+        nationality: data.nationality || 'Indian',
+        personal_email: data.personal_email || data.emp_email || '',
+        gender: data.gender || 'Male',
+        marital_status: data.marital_status || 'Single',
+        date_of_joining: data.date_of_joining ? data.date_of_joining.substring(0, 10) : '2026-01-01',
+        bank_account_no: data.bank_account_no || '',
+        bank_name: data.bank_name || '',
+        ifsc_code: data.ifsc_code || '',
+        pan_no: data.pan_no || '',
+        uan_no: data.uan_no || ''
+      });
     } catch (err) {
       setError('Failed to fetch profile details');
     } finally {
@@ -37,50 +74,28 @@ const ProfilePage = ({ user, onUserUpdate, readOnly = false }) => {
     }
   };
 
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
   const handleInfoSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
-    if (!name || !email || !phone) {
-      setError('Please fill in all info fields');
-      return;
-    }
-
-    if (phone.length !== 10 || isNaN(phone)) {
-      setError('Phone number must be exactly 10 digits');
-      return;
-    }
-
-    // Email prefix checks if role is ADMIN or HR
-    const role = user.emp_role;
-    const normalizedEmail = email.toLowerCase();
-    if (role === 'ADMIN') {
-      if (!normalizedEmail.includes('@admin') && !normalizedEmail.endsWith('admin.com')) {
-        setError('Admin email must contain "@admin" or end in "admin.com"');
-        return;
-      }
-    } else if (role === 'HR') {
-      if (!normalizedEmail.includes('@hr') && !normalizedEmail.endsWith('hr.com')) {
-        setError('HR email must contain "@hr" or end in "hr.com"');
-        return;
-      }
-    }
-
     try {
       await apiRequest(`/employees/${user.emp_id}`, {
         method: 'PUT',
-        body: JSON.stringify({ name, email, phone }),
+        body: JSON.stringify(formData),
       });
       
       setSuccess('Profile updated successfully!');
       
-      // Update parent session info if changed
       if (onUserUpdate) {
         const updatedUser = {
           ...user,
-          emp_name: name,
-          emp_email: email
+          emp_name: formData.emp_name,
+          emp_email: formData.emp_email
         };
         localStorage.setItem('dayflow_user', JSON.stringify(updatedUser));
         onUserUpdate(updatedUser);
@@ -88,7 +103,7 @@ const ProfilePage = ({ user, onUserUpdate, readOnly = false }) => {
       
       fetchProfileDetails();
     } catch (err) {
-      setError(err.message || 'Failed to update details');
+      setError(err.message || 'Failed to update profile details');
     }
   };
 
@@ -127,137 +142,390 @@ const ProfilePage = ({ user, onUserUpdate, readOnly = false }) => {
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '1.75rem', marginBottom: '6px' }}>My Account Profile</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Manage your personal details and account credentials.</p>
+      <div style={{ marginBottom: '16px' }}>
+        <h1 style={{ fontSize: '1.75rem' }}>My Profile</h1>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
 
-      <div className="profile-tabs">
-        <button className={activeTab === 'profile' ? 'active' : ''} onClick={() => setActiveTab('profile')}>Profile</button>
-        {user.emp_role === 'ADMIN' && <button className={activeTab === 'salary' ? 'active' : ''} onClick={() => setActiveTab('salary')}>Salary Info</button>}
+      {/* Header Profile Info Card */}
+      <div className="card-glass" style={{ marginBottom: '24px', padding: '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr', gap: '24px', alignItems: 'center' }}>
+          {/* Avatar with edit pencil */}
+          <div style={{ position: 'relative', width: '100px', height: '100px', margin: '0 auto' }}>
+            <div style={{
+              width: '100px',
+              height: '100px',
+              borderRadius: '50%',
+              backgroundColor: '#582c2c',
+              border: '2px solid var(--border-color)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '2.5rem',
+              color: '#fff',
+              fontWeight: '700'
+            }}>
+              {formData.emp_name ? formData.emp_name.charAt(0).toUpperCase() : 'U'}
+            </div>
+            <div title="Edit Photo" style={{
+              position: 'absolute',
+              top: '38px',
+              left: '38px',
+              fontSize: '1.2rem',
+              cursor: 'pointer'
+            }}>
+              ✏️
+            </div>
+          </div>
+
+          {/* Left Column Profile Summary */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <h2 style={{ fontSize: '1.8rem', fontWeight: '700' }}>{formData.emp_name || 'My Name'}</h2>
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Job Position</label>
+              <input
+                type="text"
+                className="form-input"
+                style={{ padding: '4px 8px', fontSize: '0.9rem' }}
+                value={formData.job_position}
+                onChange={(e) => handleInputChange('job_position', e.target.value)}
+                disabled={readOnly}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Email</label>
+              <input
+                type="email"
+                className="form-input"
+                style={{ padding: '4px 8px', fontSize: '0.9rem' }}
+                value={formData.emp_email}
+                onChange={(e) => handleInputChange('emp_email', e.target.value)}
+                disabled={readOnly}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Mobile</label>
+              <input
+                type="text"
+                className="form-input"
+                style={{ padding: '4px 8px', fontSize: '0.9rem' }}
+                value={formData.emp_phno}
+                onChange={(e) => handleInputChange('emp_phno', e.target.value)}
+                disabled={readOnly}
+              />
+            </div>
+          </div>
+
+          {/* Right Column Profile Summary */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Company</label>
+              <input
+                type="text"
+                className="form-input"
+                style={{ padding: '4px 8px', fontSize: '0.9rem', opacity: 0.8 }}
+                value={formData.company_name}
+                disabled
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Department</label>
+              <input
+                type="text"
+                className="form-input"
+                style={{ padding: '4px 8px', fontSize: '0.9rem' }}
+                value={formData.emp_department}
+                onChange={(e) => handleInputChange('emp_department', e.target.value)}
+                disabled={readOnly || user.emp_role === 'EMPLOYEE'}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Manager</label>
+              <input
+                type="text"
+                className="form-input"
+                style={{ padding: '4px 8px', fontSize: '0.9rem' }}
+                value="HR Manager"
+                disabled
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Location</label>
+              <input
+                type="text"
+                className="form-input"
+                style={{ padding: '4px 8px', fontSize: '0.9rem' }}
+                value={formData.location}
+                onChange={(e) => handleInputChange('location', e.target.value)}
+                disabled={readOnly}
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
-      {activeTab === 'salary' && user.emp_role === 'ADMIN' ? <SalaryPage user={user} /> : (
+      {/* Wireframe Tabs Header */}
+      <div className="profile-tabs" style={{ marginBottom: '24px' }}>
+        <button
+          className={activeTab === 'resume' ? 'active' : ''}
+          onClick={() => setActiveTab('resume')}
+        >
+          Resume
+        </button>
+        <button
+          className={activeTab === 'private' ? 'active' : ''}
+          onClick={() => setActiveTab('private')}
+        >
+          Private Info
+        </button>
+        <button
+          className={activeTab === 'salary' ? 'active' : ''}
+          onClick={() => setActiveTab('salary')}
+        >
+          Salary Info
+        </button>
+        <button
+          className={activeTab === 'security' ? 'active' : ''}
+          onClick={() => setActiveTab('security')}
+        >
+          Security
+        </button>
+      </div>
 
-      <div className="dashboard-layout">
-        <div className="dashboard-main">
-          <div className="card">
-            <h3 style={{ marginBottom: '20px' }}>Personal Profile Info</h3>
-            {readOnly ? <div className="profile-read-only">Employee information is view-only from the directory.</div> : null}
-            <form onSubmit={handleInfoSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="form-group">
-                <label className="form-label">Full Name</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  disabled={readOnly}
-                  required
-                />
-              </div>
+      {/* TAB 1: RESUME */}
+      {activeTab === 'resume' && (
+        <div className="card">
+          <h3 style={{ marginBottom: '16px' }}>Resume & Work Experience</h3>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+            No resume uploaded yet. You can attach work certificates or project resumes here.
+          </p>
+        </div>
+      )}
 
-              <div className="form-row">
+      {/* TAB 2: PRIVATE INFO (Exact Wireframe Fields Layout) */}
+      {activeTab === 'private' && (
+        <form onSubmit={handleInfoSubmit}>
+          <div className="card" style={{ padding: '32px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '48px' }}>
+              {/* Left Column: Personal Info */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div className="form-group">
-                  <label className="form-label">Email Address</label>
+                  <label className="form-label">Date of Birth :-</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={formData.dob}
+                    onChange={(e) => handleInputChange('dob', e.target.value)}
+                    disabled={readOnly}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Residing Address :-</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Residential Address"
+                    value={formData.residing_address}
+                    onChange={(e) => handleInputChange('residing_address', e.target.value)}
+                    disabled={readOnly}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Nationality :-</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={formData.nationality}
+                    onChange={(e) => handleInputChange('nationality', e.target.value)}
+                    disabled={readOnly}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Personal Email :-</label>
                   <input
                     type="email"
                     className="form-input"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="personal@gmail.com"
+                    value={formData.personal_email}
+                    onChange={(e) => handleInputChange('personal_email', e.target.value)}
                     disabled={readOnly}
-                    required
                   />
                 </div>
+
                 <div className="form-group">
-                  <label className="form-label">Phone Number (10 digits)</label>
-                  <input
-                    type="text"
+                  <label className="form-label">Gender :-</label>
+                  <select
                     className="form-input"
-                    maxLength="10"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    value={formData.gender}
+                    onChange={(e) => handleInputChange('gender', e.target.value)}
                     disabled={readOnly}
-                    required
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Marital Status :-</label>
+                  <select
+                    className="form-input"
+                    value={formData.marital_status}
+                    onChange={(e) => handleInputChange('marital_status', e.target.value)}
+                    disabled={readOnly}
+                  >
+                    <option value="Single">Single</option>
+                    <option value="Married">Married</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Date of Joining :-</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={formData.date_of_joining}
+                    onChange={(e) => handleInputChange('date_of_joining', e.target.value)}
+                    disabled={readOnly || user.emp_role === 'EMPLOYEE'}
                   />
                 </div>
               </div>
 
-              <div className="form-row">
+              {/* Right Column: Bank Details */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <h4 style={{ fontSize: '1.1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+                  Bank Details
+                </h4>
+
                 <div className="form-group">
-                  <label className="form-label">Department (Read-Only)</label>
+                  <label className="form-label">Account Number :-</label>
                   <input
                     type="text"
                     className="form-input"
-                    style={{ opacity: 0.65 }}
-                    value={profile?.emp_department || ''}
-                    disabled
+                    placeholder="Bank Account No"
+                    value={formData.bank_account_no}
+                    onChange={(e) => handleInputChange('bank_account_no', e.target.value)}
+                    disabled={readOnly}
                   />
                 </div>
+
                 <div className="form-group">
-                  <label className="form-label">Corporate Role (Read-Only)</label>
+                  <label className="form-label">Bank Name :-</label>
                   <input
                     type="text"
                     className="form-input"
-                    style={{ opacity: 0.65 }}
-                    value={profile?.emp_role || ''}
+                    placeholder="e.g. HDFC Bank"
+                    value={formData.bank_name}
+                    onChange={(e) => handleInputChange('bank_name', e.target.value)}
+                    disabled={readOnly}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">IFSC Code :-</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="IFSC Code"
+                    value={formData.ifsc_code}
+                    onChange={(e) => handleInputChange('ifsc_code', e.target.value)}
+                    disabled={readOnly}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">PAN No :-</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="PAN Number"
+                    value={formData.pan_no}
+                    onChange={(e) => handleInputChange('pan_no', e.target.value)}
+                    disabled={readOnly}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">UAN No :-</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="UAN Number"
+                    value={formData.uan_no}
+                    onChange={(e) => handleInputChange('uan_no', e.target.value)}
+                    disabled={readOnly}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Emp Code :-</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={profile?.login_id || `EMP#${profile?.emp_id}`}
                     disabled
                   />
                 </div>
               </div>
+            </div>
 
-              {!readOnly && <button type="submit" className="btn btn-primary" style={{ width: 'auto', marginTop: '10px' }}>
-                Save Profile Changes
-              </button>}
-            </form>
+            {!readOnly && (
+              <div style={{ marginTop: '32px', textAlign: 'right' }}>
+                <button type="submit" className="btn btn-primary" style={{ width: 'auto' }}>
+                  Save Private Info
+                </button>
+              </div>
+            )}
           </div>
+        </form>
+      )}
+
+      {/* TAB 3: SALARY INFO */}
+      {activeTab === 'salary' && (
+        <SalaryPage user={user} />
+      )}
+
+      {/* TAB 4: SECURITY */}
+      {activeTab === 'security' && (
+        <div className="card" style={{ maxWidth: '500px' }}>
+          <h3 style={{ marginBottom: '20px' }}>Security & Credentials</h3>
+          <form onSubmit={handlePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="form-group">
+              <label className="form-label">New Password</label>
+              <input
+                type="password"
+                className="form-input"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Confirm New Password</label>
+              <input
+                type="password"
+                className="form-input"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <button type="submit" className="btn btn-secondary" style={{ marginTop: '10px' }}>
+              Update Password
+            </button>
+          </form>
         </div>
-
-        {!readOnly && <div className="dashboard-side">
-          <div className="card">
-            <h3 style={{ marginBottom: '20px' }}>Update Password</h3>
-            <form onSubmit={handlePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="form-group">
-                <label className="form-label">New Password</label>
-                <input
-                  type="password"
-                  className="form-input"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Confirm New Password</label>
-                <input
-                  type="password"
-                  className="form-input"
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                />
-              </div>
-
-              <button type="submit" className="btn btn-secondary" style={{ marginTop: '10px' }}>
-                Update Password
-              </button>
-            </form>
-          </div>
-
-          <div className="card" style={{ marginTop: '20px', borderLeft: '4px solid var(--success)' }}>
-            <h4 style={{ color: 'var(--text-primary)', marginBottom: '6px' }}>Account Standing</h4>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              Your account status is currently: <strong style={{ color: 'var(--success)' }}>{profile?.acc_status}</strong>. If you require department adjustments, please submit an HR query.
-            </p>
-          </div>
-        </div>}
-      </div>
       )}
     </div>
   );

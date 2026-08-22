@@ -127,14 +127,17 @@ router.post('/', authenticateToken, isAdminOrHR, async (req, res) => {
 router.get('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
 
-  // Enforce access rule: Employee can view own, Admin/HR can view anyone's
   if (req.user.emp_role === 'EMPLOYEE' && String(req.user.emp_id) !== String(id)) {
     return res.status(403).json({ message: 'Access Denied: You can only view your own details' });
   }
 
   try {
     const [rows] = await db.query(
-      'SELECT e.*, l.acc_status FROM Employee e LEFT JOIN Login l ON e.emp_id = l.emp_id WHERE e.emp_id = ?',
+      `SELECT e.*, l.acc_status, c.company_name 
+       FROM Employee e 
+       LEFT JOIN Login l ON e.emp_id = l.emp_id 
+       LEFT JOIN Company c ON e.company_id = c.company_id 
+       WHERE e.emp_id = ?`,
       [id]
     );
 
@@ -149,15 +152,19 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Update employee details
+// Update employee details (extended wireframe profile support)
 router.put('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { name, department, role, email, phone, acc_status, password } = req.body;
+  const { 
+    name, department, role, email, phone, acc_status, password,
+    job_position, location, dob, residing_address, nationality,
+    personal_email, gender, marital_status, date_of_joining,
+    bank_account_no, bank_name, ifsc_code, pan_no, uan_no
+  } = req.body;
 
   const isSelf = String(req.user.emp_id) === String(id);
   const isManager = req.user.emp_role === 'ADMIN' || req.user.emp_role === 'HR';
 
-  // Access check
   if (!isSelf && !isManager) {
     return res.status(403).json({ message: 'Access Denied: You cannot edit this profile' });
   }
@@ -166,7 +173,6 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    // Fetch existing employee data
     const [existing] = await conn.query('SELECT e.*, l.acc_status FROM Employee e JOIN Login l ON e.emp_id = l.emp_id WHERE e.emp_id = ?', [id]);
     if (existing.length === 0) {
       await conn.rollback();
@@ -175,7 +181,6 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     const currentEmp = existing[0];
 
-    // Determine values to update
     const finalName = name !== undefined ? name : currentEmp.emp_name;
     const finalDept = (department !== undefined && isManager) ? department : currentEmp.emp_department;
     const finalRole = (role !== undefined && isManager) ? role.toUpperCase() : currentEmp.emp_role;
@@ -183,7 +188,6 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const finalPhone = phone !== undefined ? phone : currentEmp.emp_phno;
     const finalStatus = (acc_status !== undefined && isManager) ? acc_status : currentEmp.acc_status;
 
-    // Check unique email and phone if they changed
     if (finalEmail !== currentEmp.emp_email || finalPhone !== currentEmp.emp_phno) {
       const [dup] = await conn.query(
         'SELECT emp_id FROM Employee WHERE (emp_email = ? AND emp_id != ?) OR (emp_phno = ? AND emp_id != ?)',
@@ -195,25 +199,31 @@ router.put('/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    // Role-email check if updated
-    if (finalRole !== currentEmp.emp_role || finalEmail !== currentEmp.emp_email) {
-      if (finalRole === 'ADMIN') {
-        if (!finalEmail.includes('@admin') && !finalEmail.endsWith('admin.com')) {
-          await conn.rollback();
-          return res.status(400).json({ message: 'Admin registration requires an email containing "@admin" or ending in "admin.com"' });
-        }
-      } else if (finalRole === 'HR') {
-        if (!finalEmail.includes('@hr') && !finalEmail.endsWith('hr.com')) {
-          await conn.rollback();
-          return res.status(400).json({ message: 'HR registration requires an email containing "@hr" or ending in "hr.com"' });
-        }
-      }
-    }
-
-    // Update Employee table
     await conn.query(
-      'UPDATE Employee SET emp_name = ?, emp_department = ?, emp_role = ?, emp_email = ?, emp_phno = ? WHERE emp_id = ?',
-      [finalName, finalDept, finalRole, finalEmail, finalPhone, id]
+      `UPDATE Employee SET 
+         emp_name = ?, emp_department = ?, emp_role = ?, emp_email = ?, emp_phno = ?,
+         job_position = ?, location = ?, dob = ?, residing_address = ?, nationality = ?,
+         personal_email = ?, gender = ?, marital_status = ?, date_of_joining = ?,
+         bank_account_no = ?, bank_name = ?, ifsc_code = ?, pan_no = ?, uan_no = ?
+       WHERE emp_id = ?`,
+      [
+        finalName, finalDept, finalRole, finalEmail, finalPhone,
+        job_position !== undefined ? job_position : currentEmp.job_position,
+        location !== undefined ? location : currentEmp.location,
+        dob !== undefined ? dob : currentEmp.dob,
+        residing_address !== undefined ? residing_address : currentEmp.residing_address,
+        nationality !== undefined ? nationality : currentEmp.nationality,
+        personal_email !== undefined ? personal_email : currentEmp.personal_email,
+        gender !== undefined ? gender : currentEmp.gender,
+        marital_status !== undefined ? marital_status : currentEmp.marital_status,
+        date_of_joining !== undefined ? date_of_joining : currentEmp.date_of_joining,
+        bank_account_no !== undefined ? bank_account_no : currentEmp.bank_account_no,
+        bank_name !== undefined ? bank_name : currentEmp.bank_name,
+        ifsc_code !== undefined ? ifsc_code : currentEmp.ifsc_code,
+        pan_no !== undefined ? pan_no : currentEmp.pan_no,
+        uan_no !== undefined ? uan_no : currentEmp.uan_no,
+        id
+      ]
     );
 
     // Update Login Status

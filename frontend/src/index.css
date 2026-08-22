@@ -461,6 +461,123 @@ button, input, select, textarea {
   font-family: monospace;
 }
 
+/* --- Wireframe Profile & Time Off Styling --- */
+.profile-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.profile-tabs button {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  padding: 10px 20px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.profile-tabs button.active {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--primary);
+  box-shadow: inset 0 2px 0 var(--primary);
+}
+
+.wireframe-timeoff-header {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15));
+  backdrop-filter: var(--glass-blur);
+  border-radius: var(--radius-md);
+  padding: 20px 28px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.annual-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1200px) {
+  .annual-calendar-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .annual-calendar-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.calendar-month-box {
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+}
+
+.calendar-month-title {
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-align: center;
+  margin-bottom: 6px;
+  color: var(--text-primary);
+}
+
+.calendar-week-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.calendar-days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.calendar-day {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  color: var(--text-primary);
+}
+
+.calendar-day.empty {
+  background: transparent;
+}
+
+.calendar-day.validated {
+  background-color: rgba(16, 185, 129, 0.25);
+  color: #34d399;
+  font-weight: 700;
+}
+
+.calendar-day.to-approve {
+  background-color: rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
+  font-weight: 700;
+}
+
+.calendar-day.refused {
+  background-color: rgba(244, 63, 94, 0.25);
+  color: #f87171;
+  font-weight: 700;
+}
+
 /* --- Common UI Components --- */
 .card {
   background-color: var(--bg-secondary);

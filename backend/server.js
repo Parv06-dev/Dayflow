@@ -80,6 +80,7 @@ async function initDB() {
     CREATE TABLE IF NOT EXISTS Leave_Request (
       leave_id        INT AUTO_INCREMENT PRIMARY KEY,
       emp_id          INT          NOT NULL,
+      leave_type      VARCHAR(50)  DEFAULT 'Paid time Off',
       from_date       DATE         NOT NULL,
       to_date         DATE         NOT NULL,
       reason          VARCHAR(1000) NOT NULL,
@@ -107,24 +108,27 @@ async function initDB() {
   console.log('✅ All tables verified / created.');
 
   // Safe migration for existing databases created before new columns/tables were added
-  try {
-    await initConn.query(`ALTER TABLE Employee ADD COLUMN login_id VARCHAR(50) UNIQUE NULL;`);
-  } catch (e) {}
-  try {
-    await initConn.query(`ALTER TABLE Employee ADD COLUMN joining_year INT NOT NULL DEFAULT 2026;`);
-  } catch (e) {}
-  try {
-    await initConn.query(`ALTER TABLE Employee ADD COLUMN serial_num INT NOT NULL DEFAULT 1;`);
-  } catch (e) {}
-  try {
-    await initConn.query(`ALTER TABLE Employee ADD COLUMN company_id INT NULL;`);
-  } catch (e) {}
-  try {
-    await initConn.query(`ALTER TABLE Login ADD COLUMN login_id VARCHAR(50) NULL;`);
-  } catch (e) {}
-  try {
-    await initConn.query(`ALTER TABLE Login ADD COLUMN is_temp_pass BOOLEAN DEFAULT FALSE;`);
-  } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN login_id VARCHAR(50) UNIQUE NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN joining_year INT NOT NULL DEFAULT 2026;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN serial_num INT NOT NULL DEFAULT 1;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN company_id INT NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN job_position VARCHAR(100) NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN location VARCHAR(100) NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN dob DATE NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN residing_address VARCHAR(255) NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN nationality VARCHAR(100) DEFAULT 'Indian';`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN personal_email VARCHAR(100) NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN gender VARCHAR(20) NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN marital_status VARCHAR(20) NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN date_of_joining DATE NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN bank_account_no VARCHAR(50) NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN bank_name VARCHAR(100) NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN ifsc_code VARCHAR(20) NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN pan_no VARCHAR(20) NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD COLUMN uan_no VARCHAR(30) NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Leave_Request ADD COLUMN leave_type VARCHAR(50) DEFAULT 'Paid time Off';`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Login ADD COLUMN login_id VARCHAR(50) NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Login ADD COLUMN is_temp_pass BOOLEAN DEFAULT FALSE;`); } catch (e) {}
 
   // Step 5: Seed default users if Employee table is empty
   const [rows] = await initConn.query('SELECT COUNT(*) AS cnt FROM Employee;');
