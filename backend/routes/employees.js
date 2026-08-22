@@ -3,14 +3,27 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { authenticateToken, isAdmin, isAdminOrHR } = require('../middleware/auth');
+const { generateLoginId, generateTempPassword } = require('../utils/helpers');
 
-// List & Search Employees (Authenticated users)
+// ─────────────────────────────────────────────────────────────────────────────
+// SECURITY NOTE: req.user.company_id comes from the verified JWT token only.
+// We NEVER trust company_id from req.body, req.params, or req.query.
+// All queries enforce: WHERE ... AND company_id = req.user.company_id
+// ─────────────────────────────────────────────────────────────────────────────
+
+// List & Search Employees — tenant-scoped
 router.get('/', authenticateToken, async (req, res) => {
   const { name, role } = req.query;
+  const companyId = req.user.company_id;
 
   try {
-    let query = 'SELECT e.*, l.acc_status FROM Employee e LEFT JOIN Login l ON e.emp_id = l.emp_id WHERE 1=1';
-    const params = [];
+    let query = `
+      SELECT e.*, l.acc_status
+      FROM Employee e
+      LEFT JOIN Login l ON e.emp_id = l.emp_id
+      WHERE e.company_id = ?
+    `;
+    const params = [companyId];
 
     if (name) {
       query += ' AND e.emp_name LIKE ?';
@@ -22,7 +35,6 @@ router.get('/', authenticateToken, async (req, res) => {
       params.push(role);
     }
 
-    // Sort by name
     query += ' ORDER BY e.emp_name ASC';
 
     const [rows] = await db.query(query, params);
@@ -33,9 +45,11 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-// Add a new Employee manually (Admin/HR Only)
+// Add a new Employee manually (Admin/HR Only) — inherits company_id from JWT
 router.post('/', authenticateToken, isAdminOrHR, async (req, res) => {
   const { name, department, role, email, phone, password } = req.body;
+  // SECURITY: company_id always derived from the authenticated user's JWT token.
+  const companyId = req.user.company_id;
 
   if (!name || !department || !role || !email || !phone) {
     return res.status(400).json({ message: 'Name, department, role, email, and phone are required' });
@@ -52,45 +66,40 @@ router.post('/', authenticateToken, isAdminOrHR, async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    // Check unique email/phone
+    // Duplicate check is scoped to THIS company (composite unique index on company_id+email/phno)
     const [existing] = await conn.query(
-      'SELECT emp_id FROM Employee WHERE emp_email = ? OR emp_phno = ?',
-      [email, phone]
+      'SELECT emp_id FROM Employee WHERE company_id = ? AND (emp_email = ? OR emp_phno = ?)',
+      [companyId, normalizedEmail, phone]
     );
 
     if (existing.length > 0) {
       await conn.rollback();
-      return res.status(400).json({ message: 'Email or phone number already in use' });
+      return res.status(400).json({ message: 'Email or phone number already in use within your company' });
     }
 
-    // Fetch user's company code
+    // Fetch company code for login_id generation
     const [companyRow] = await conn.query(
-      `SELECT c.company_code, c.company_id 
-       FROM Employee e JOIN Company c ON e.company_id = c.company_id 
-       WHERE e.emp_id = ?`,
-      [req.user.emp_id]
+      'SELECT company_code FROM Company WHERE company_id = ?',
+      [companyId]
     );
-
     const compCode = companyRow.length > 0 ? companyRow[0].company_code : 'DF';
-    const companyId = companyRow.length > 0 ? companyRow[0].company_id : null;
 
-    // Generate Login ID
+    // Generate Login ID — serial scoped to this company to prevent cross-tenant collisions
     const currentYear = new Date().getFullYear();
     const [serialRow] = await conn.query(
-      'SELECT COUNT(*) as count FROM Employee WHERE joining_year = ?',
-      [currentYear]
+      'SELECT COUNT(*) as count FROM Employee WHERE company_id = ? AND joining_year = ?',
+      [companyId, currentYear]
     );
     const serial = serialRow[0].count + 1;
-    const { generateLoginId, generateTempPassword } = require('../utils/helpers');
     const loginId = generateLoginId(compCode, name, currentYear, serial);
 
     // Temp password if not specified
     const rawPassword = password || generateTempPassword();
 
-    // Insert Employee
+    // Insert Employee — company_id from JWT (NEVER from request body)
     const [empResult] = await conn.query(
-      `INSERT INTO Employee 
-       (login_id, emp_name, emp_department, emp_role, emp_email, emp_phno, joining_year, serial_num, company_id) 
+      `INSERT INTO Employee
+       (login_id, emp_name, emp_department, emp_role, emp_email, emp_phno, joining_year, serial_num, company_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [loginId, name, department, normalizedRole, normalizedEmail, phone, currentYear, serial, companyId]
     );
@@ -123,20 +132,23 @@ router.post('/', authenticateToken, isAdminOrHR, async (req, res) => {
   }
 });
 
-// Get detailed info for single employee
+// Get detailed info for a single employee — tenant-scoped (prevents cross-company IDOR)
 router.get('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
+  const companyId = req.user.company_id;
   const isSelf = String(req.user.emp_id) === String(id);
   const isManager = req.user.emp_role === 'ADMIN' || req.user.emp_role === 'HR';
 
   try {
+    // SECURITY: AND e.company_id = ? prevents cross-tenant IDOR.
+    // A valid emp_id from another company returns 404, not 403, to avoid leaking existence.
     const [rows] = await db.query(
-      `SELECT e.*, l.acc_status, c.company_name 
-       FROM Employee e 
-       LEFT JOIN Login l ON e.emp_id = l.emp_id 
-       LEFT JOIN Company c ON e.company_id = c.company_id 
-       WHERE e.emp_id = ?`,
-      [id]
+      `SELECT e.*, l.acc_status, c.company_name
+       FROM Employee e
+       LEFT JOIN Login l ON e.emp_id = l.emp_id
+       LEFT JOIN Company c ON e.company_id = c.company_id
+       WHERE e.emp_id = ? AND e.company_id = ?`,
+      [id, companyId]
     );
 
     if (rows.length === 0) {
@@ -170,10 +182,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Update employee details (extended wireframe profile support)
+// Update employee details — tenant-scoped
 router.put('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { 
+  const companyId = req.user.company_id;
+  const {
     name, department, role, email, phone, acc_status, password,
     job_position, location, dob, residing_address, nationality,
     personal_email, gender, marital_status, date_of_joining,
@@ -191,7 +204,15 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    const [existing] = await conn.query('SELECT e.*, l.acc_status FROM Employee e JOIN Login l ON e.emp_id = l.emp_id WHERE e.emp_id = ?', [id]);
+    // SECURITY: AND e.company_id = ? prevents cross-company profile updates.
+    const [existing] = await conn.query(
+      `SELECT e.*, l.acc_status
+       FROM Employee e
+       JOIN Login l ON e.emp_id = l.emp_id
+       WHERE e.emp_id = ? AND e.company_id = ?`,
+      [id, companyId]
+    );
+
     if (existing.length === 0) {
       await conn.rollback();
       return res.status(404).json({ message: 'Employee not found' });
@@ -199,17 +220,19 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     const currentEmp = existing[0];
 
-    const finalName = name !== undefined ? name : currentEmp.emp_name;
-    const finalDept = (department !== undefined && isManager) ? department : currentEmp.emp_department;
-    const finalRole = (role !== undefined && isManager) ? role.toUpperCase() : currentEmp.emp_role;
-    const finalEmail = email !== undefined ? email.toLowerCase() : currentEmp.emp_email;
-    const finalPhone = phone !== undefined ? phone : currentEmp.emp_phno;
+    const finalName   = name !== undefined ? name : currentEmp.emp_name;
+    const finalDept   = (department !== undefined && isManager) ? department : currentEmp.emp_department;
+    const finalRole   = (role !== undefined && isManager) ? role.toUpperCase() : currentEmp.emp_role;
+    const finalEmail  = email !== undefined ? email.toLowerCase() : currentEmp.emp_email;
+    const finalPhone  = phone !== undefined ? phone : currentEmp.emp_phno;
     const finalStatus = (acc_status !== undefined && isManager) ? acc_status : currentEmp.acc_status;
 
+    // Duplicate email/phone check scoped to this company, excluding self
     if (finalEmail !== currentEmp.emp_email || finalPhone !== currentEmp.emp_phno) {
       const [dup] = await conn.query(
-        'SELECT emp_id FROM Employee WHERE (emp_email = ? AND emp_id != ?) OR (emp_phno = ? AND emp_id != ?)',
-        [finalEmail, id, finalPhone, id]
+        `SELECT emp_id FROM Employee
+         WHERE company_id = ? AND ((emp_email = ? AND emp_id != ?) OR (emp_phno = ? AND emp_id != ?))`,
+        [companyId, finalEmail, id, finalPhone, id]
       );
       if (dup.length > 0) {
         await conn.rollback();
@@ -218,12 +241,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 
     await conn.query(
-      `UPDATE Employee SET 
+      `UPDATE Employee SET
          emp_name = ?, emp_department = ?, emp_role = ?, emp_email = ?, emp_phno = ?,
          job_position = ?, location = ?, dob = ?, residing_address = ?, nationality = ?,
          personal_email = ?, gender = ?, marital_status = ?, date_of_joining = ?,
          bank_account_no = ?, bank_name = ?, ifsc_code = ?, pan_no = ?, uan_no = ?
-       WHERE emp_id = ?`,
+       WHERE emp_id = ? AND company_id = ?`,
       [
         finalName, finalDept, finalRole, finalEmail, finalPhone,
         job_position !== undefined ? job_position : currentEmp.job_position,
@@ -240,7 +263,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
         ifsc_code !== undefined ? ifsc_code : currentEmp.ifsc_code,
         pan_no !== undefined ? pan_no : currentEmp.pan_no,
         uan_no !== undefined ? uan_no : currentEmp.uan_no,
-        id
+        id, companyId
       ]
     );
 
@@ -255,7 +278,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
       await conn.query(
-        'UPDATE Login SET Password = ? WHERE emp_id = ?',
+        'UPDATE Login SET Password = ?, is_temp_pass = FALSE WHERE emp_id = ?',
         [hashedPassword, id]
       );
     }
@@ -271,16 +294,21 @@ router.put('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete Employee (Admin Only)
+// Delete Employee (Admin Only) — tenant-scoped
 router.delete('/:id', authenticateToken, isAdmin, async (req, res) => {
   const { id } = req.params;
+  const companyId = req.user.company_id;
 
   if (String(req.user.emp_id) === String(id)) {
     return res.status(400).json({ message: 'You cannot delete your own account' });
   }
 
   try {
-    const [result] = await db.query('DELETE FROM Employee WHERE emp_id = ?', [id]);
+    // SECURITY: AND company_id = ? prevents deleting employees from other companies.
+    const [result] = await db.query(
+      'DELETE FROM Employee WHERE emp_id = ? AND company_id = ?',
+      [id, companyId]
+    );
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Employee not found' });

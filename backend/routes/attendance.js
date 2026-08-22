@@ -3,6 +3,12 @@ const router = express.Router();
 const db = require('../db');
 const { authenticateToken, isAdminOrHR } = require('../middleware/auth');
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SECURITY NOTE: All company-scoped queries use req.user.company_id from JWT.
+// emp_id-scoped operations (punch/status) are implicitly safe because emp_id
+// is derived from the authenticated token, not client input.
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Helper to format date as YYYY-MM-DD in local time
 const getLocalDateString = () => {
   const d = new Date();
@@ -21,7 +27,7 @@ const getLocalTimeString = () => {
   return `${hours}:${minutes}:${seconds}`;
 };
 
-// Clock In / Clock Out Toggle (Authenticated users)
+// Clock In / Clock Out Toggle — emp_id from JWT only (inherently tenant-safe)
 router.post('/punch', authenticateToken, async (req, res) => {
   const empId = req.user.emp_id;
   const requestedAction = req.body.action && req.body.action.toUpperCase();
@@ -72,7 +78,7 @@ router.post('/punch', authenticateToken, async (req, res) => {
   }
 });
 
-// Check Current Status of User's Punch for Today (Authenticated users)
+// Check Current Status of User's Punch for Today — emp_id from JWT only
 router.get('/status', authenticateToken, async (req, res) => {
   const empId = req.user.emp_id;
   const today = getLocalDateString();
@@ -99,27 +105,47 @@ router.get('/status', authenticateToken, async (req, res) => {
   }
 });
 
-// Dashboard Summary of Today's Attendance (Admin/HR Only)
+// Dashboard Summary of Today's Attendance (Admin/HR Only) — tenant-scoped
 router.get('/today', authenticateToken, isAdminOrHR, async (req, res) => {
   const today = getLocalDateString();
+  // SECURITY: Only employees belonging to this manager's company are included.
+  const companyId = req.user.company_id;
 
   try {
-    // 1. Get all active employees
-    const [employees] = await db.query('SELECT emp_id, emp_name, emp_department, emp_role FROM Employee');
-    
-    // 2. Get today's attendance records (group by emp_id taking earliest login & latest logout)
-    const [attendance] = await db.query(
-      `SELECT emp_id, MIN(login_time) as login_time, MAX(logout_time) as logout_time 
-       FROM Attendance 
-       WHERE attendance_date = ? 
-       GROUP BY emp_id`,
-      [today]
+    // 1. Get all active employees in THIS company only
+    const [employees] = await db.query(
+      'SELECT emp_id, emp_name, emp_department, emp_role FROM Employee WHERE company_id = ?',
+      [companyId]
     );
 
-    // 3. Get today's approved leaves
+    // Extract employee IDs for subsequent scoped queries
+    const empIds = employees.map(e => e.emp_id);
+
+    if (empIds.length === 0) {
+      return res.json({
+        date: today,
+        stats: { total: 0, present: 0, onLeave: 0, absent: 0 },
+        punches: []
+      });
+    }
+
+    // 2. Get today's attendance records for this company's employees only
+    const placeholders = empIds.map(() => '?').join(', ');
+    const [attendance] = await db.query(
+      `SELECT emp_id, MIN(login_time) as login_time, MAX(logout_time) as logout_time
+       FROM Attendance
+       WHERE attendance_date = ? AND emp_id IN (${placeholders})
+       GROUP BY emp_id`,
+      [today, ...empIds]
+    );
+
+    // 3. Get today's approved leaves for this company's employees only
     const [leaves] = await db.query(
-      "SELECT DISTINCT emp_id FROM Leave_Request WHERE approved_status = 'Approved' AND ? BETWEEN from_date AND to_date",
-      [today]
+      `SELECT DISTINCT emp_id FROM Leave_Request
+       WHERE approved_status = 'Approved'
+         AND ? BETWEEN from_date AND to_date
+         AND emp_id IN (${placeholders})`,
+      [today, ...empIds]
     );
 
     const presentMap = new Map(attendance.map(a => [a.emp_id, a]));
@@ -132,7 +158,7 @@ router.get('/today', authenticateToken, isAdminOrHR, async (req, res) => {
     const punchList = employees.map(emp => {
       const hasPunch = presentMap.get(emp.emp_id);
       const isOnLeave = leaveSet.has(emp.emp_id);
-      
+
       let status = 'Absent';
       if (hasPunch) {
         status = 'Present';
@@ -170,9 +196,10 @@ router.get('/today', authenticateToken, isAdminOrHR, async (req, res) => {
   }
 });
 
-// Fetch Single Employee's Attendance History (Self or Admin/HR)
+// Fetch Single Employee's Attendance History (Self or Admin/HR) — tenant-scoped
 router.get('/employee/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
+  const companyId = req.user.company_id;
   const isSelf = String(req.user.emp_id) === String(id);
   const isManager = req.user.emp_role === 'ADMIN' || req.user.emp_role === 'HR';
 
@@ -181,11 +208,22 @@ router.get('/employee/:id', authenticateToken, async (req, res) => {
   }
 
   try {
+    // SECURITY: Verify the requested employee belongs to the caller's company.
+    // This prevents a manager from Company A viewing attendance of Company B employees.
+    const [empCheck] = await db.query(
+      'SELECT emp_id FROM Employee WHERE emp_id = ? AND company_id = ?',
+      [id, companyId]
+    );
+
+    if (empCheck.length === 0) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
     const [rows] = await db.query(
-      `SELECT attendance_date, MIN(login_time) as login_time, MAX(logout_time) as logout_time 
-       FROM Attendance 
-       WHERE emp_id = ? 
-       GROUP BY attendance_date 
+      `SELECT attendance_date, MIN(login_time) as login_time, MAX(logout_time) as logout_time
+       FROM Attendance
+       WHERE emp_id = ?
+       GROUP BY attendance_date
        ORDER BY attendance_date DESC`,
       [id]
     );
@@ -197,7 +235,7 @@ router.get('/employee/:id', authenticateToken, async (req, res) => {
         const [linH, linM, linS] = r.login_time.split(':').map(Number);
         const [loutH, loutM, loutS] = r.logout_time.split(':').map(Number);
 
-        const loginSec = linH * 3600 + (linM || 0) * 60 + (linS || 0);
+        const loginSec  = linH * 3600 + (linM || 0) * 60 + (linS || 0);
         const logoutSec = loutH * 3600 + (loutM || 0) * 60 + (loutS || 0);
 
         workedHours = Math.max(0, (logoutSec - loginSec) / 3600);

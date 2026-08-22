@@ -3,6 +3,12 @@ const router = express.Router();
 const db = require('../db');
 const { authenticateToken } = require('../middleware/auth');
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SECURITY NOTE: All employee lookups are scoped to req.user.company_id (JWT).
+// Managers supplying an emp_id query param are still verified against their
+// company — they cannot request salary data for another company's employees.
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Get Base Salary for a role
 const getBaseSalary = (role) => {
   const normalized = role.toUpperCase();
@@ -15,7 +21,7 @@ const getBaseSalary = (role) => {
 const getMonthOverlapDays = (fromDateStr, toDateStr, year, month) => {
   const fromDate = new Date(fromDateStr);
   const toDate = new Date(toDateStr);
-  
+
   // month parameter is 1-indexed (1 = Jan, 12 = Dec)
   const startOfMonth = new Date(year, month - 1, 1);
   const endOfMonth = new Date(year, month, 0); // Last day of month
@@ -32,34 +38,51 @@ const getMonthOverlapDays = (fromDateStr, toDateStr, year, month) => {
   return diffDays;
 };
 
-// Calculate & Fetch Salary Endpoint
+// Calculate & Fetch Salary — tenant-scoped
 router.get('/', authenticateToken, async (req, res) => {
   const isManager = req.user.emp_role === 'ADMIN' || req.user.emp_role === 'HR';
+  const companyId = req.user.company_id;
   const { emp_id, month, year } = req.query;
 
   // Set default month & year if not provided
   const now = new Date();
-  const targetYear = parseInt(year) || now.getFullYear();
+  const targetYear  = parseInt(year)  || now.getFullYear();
   const targetMonth = parseInt(month) || (now.getMonth() + 1); // 1-indexed month
 
-  let targetEmpId = null;
-  if (!isManager) {
-    targetEmpId = req.user.emp_id;
-  } else if (emp_id) {
-    targetEmpId = emp_id;
-  }
-
   try {
-    let empQuery = `
-      SELECT e.emp_id, e.emp_name, e.emp_department, e.emp_role, e.emp_email, e.emp_phno, c.company_name 
-      FROM Employee e 
-      LEFT JOIN Company c ON e.company_id = c.company_id
-    `;
-    const empParams = [];
-    if (targetEmpId) {
-      empQuery += ' WHERE e.emp_id = ?';
-      empParams.push(targetEmpId);
+    let empQuery;
+    let empParams;
+
+    if (!isManager) {
+      // Regular employee: always their own record only
+      empQuery = `
+        SELECT e.emp_id, e.emp_name, e.emp_department, e.emp_role, e.emp_email, e.emp_phno, c.company_name
+        FROM Employee e
+        LEFT JOIN Company c ON e.company_id = c.company_id
+        WHERE e.emp_id = ? AND e.company_id = ?
+      `;
+      empParams = [req.user.emp_id, companyId];
+    } else if (emp_id) {
+      // Manager requesting a specific employee:
+      // SECURITY: AND e.company_id = ? prevents cross-tenant salary access.
+      empQuery = `
+        SELECT e.emp_id, e.emp_name, e.emp_department, e.emp_role, e.emp_email, e.emp_phno, c.company_name
+        FROM Employee e
+        LEFT JOIN Company c ON e.company_id = c.company_id
+        WHERE e.emp_id = ? AND e.company_id = ?
+      `;
+      empParams = [emp_id, companyId];
+    } else {
+      // Manager requesting all employees: scoped to their company
+      empQuery = `
+        SELECT e.emp_id, e.emp_name, e.emp_department, e.emp_role, e.emp_email, e.emp_phno, c.company_name
+        FROM Employee e
+        LEFT JOIN Company c ON e.company_id = c.company_id
+        WHERE e.company_id = ?
+      `;
+      empParams = [companyId];
     }
+
     const [employees] = await db.query(empQuery, empParams);
 
     const salaryList = [];
@@ -67,7 +90,7 @@ router.get('/', authenticateToken, async (req, res) => {
     for (const emp of employees) {
       // 1. Check if HR/Admin has customized this employee's salary in the Salary table
       const [customSalRows] = await db.query('SELECT * FROM Salary WHERE emp_id = ?', [emp.emp_id]);
-      
+
       let baseSalary = getBaseSalary(emp.emp_role);
       let customSal = null;
 
@@ -157,7 +180,7 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-// Update / Configure Employee Salary Structure (HR/Admin Only)
+// Update / Configure Employee Salary Structure (HR/Admin Only) — tenant-scoped
 router.put('/:emp_id', authenticateToken, async (req, res) => {
   const isManager = req.user.emp_role === 'ADMIN' || req.user.emp_role === 'HR';
   if (!isManager) {
@@ -165,6 +188,7 @@ router.put('/:emp_id', authenticateToken, async (req, res) => {
   }
 
   const { emp_id } = req.params;
+  const companyId = req.user.company_id;
   const {
     Monthly_Wage,
     Basic_Salary,
@@ -178,14 +202,25 @@ router.put('/:emp_id', authenticateToken, async (req, res) => {
   } = req.body;
 
   try {
+    // SECURITY: Verify the employee being updated belongs to this manager's company.
+    // Without this check, a manager could update salary for any emp_id globally.
+    const [empCheck] = await db.query(
+      'SELECT emp_id FROM Employee WHERE emp_id = ? AND company_id = ?',
+      [emp_id, companyId]
+    );
+
+    if (empCheck.length === 0) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
     const [existing] = await db.query('SELECT salary_id FROM Salary WHERE emp_id = ?', [emp_id]);
 
     if (existing.length > 0) {
       await db.query(
-        `UPDATE Salary SET 
-           Monthly_Wage = ?, Basic_Salary = ?, HRA = ?, St_Allowance = ?, 
-           Performance_Bonus = ?, Leave_Travel_Allowance = ?, fixed_Allowance = ?, 
-           Provident_fund = ?, Tax_Deduction = ? 
+        `UPDATE Salary SET
+           Monthly_Wage = ?, Basic_Salary = ?, HRA = ?, St_Allowance = ?,
+           Performance_Bonus = ?, Leave_Travel_Allowance = ?, fixed_Allowance = ?,
+           Provident_fund = ?, Tax_Deduction = ?
          WHERE emp_id = ?`,
         [
           Monthly_Wage, Basic_Salary, HRA, St_Allowance,
@@ -195,8 +230,8 @@ router.put('/:emp_id', authenticateToken, async (req, res) => {
       );
     } else {
       await db.query(
-        `INSERT INTO Salary 
-         (emp_id, Monthly_Wage, Basic_Salary, HRA, St_Allowance, Performance_Bonus, Leave_Travel_Allowance, fixed_Allowance, Provident_fund, Tax_Deduction) 
+        `INSERT INTO Salary
+         (emp_id, Monthly_Wage, Basic_Salary, HRA, St_Allowance, Performance_Bonus, Leave_Travel_Allowance, fixed_Allowance, Provident_fund, Tax_Deduction)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           emp_id, Monthly_Wage, Basic_Salary, HRA, St_Allowance,
