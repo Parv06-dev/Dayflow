@@ -130,24 +130,37 @@ async function initDB() {
   try { await initConn.query(`ALTER TABLE Login ADD COLUMN login_id VARCHAR(50) NULL;`); } catch (e) {}
   try { await initConn.query(`ALTER TABLE Login ADD COLUMN is_temp_pass BOOLEAN DEFAULT FALSE;`); } catch (e) {}
 
-  // Step 5: Seed default users if Employee table is empty
+  // ─── Tenant-isolation schema migration ──────────────────────────
+  await initConn.query(`INSERT IGNORE INTO Company (company_id, company_name, company_code) VALUES (1, 'Default Company', 'DC');`);
+  await initConn.query(`UPDATE Employee SET company_id = 1 WHERE company_id IS NULL;`);
+
+  const indexesToDrop = [
+    `ALTER TABLE Employee DROP INDEX emp_email`,
+    `ALTER TABLE Employee DROP INDEX emp_phno`,
+    `ALTER TABLE Employee DROP INDEX uidx_company_email`,
+    `ALTER TABLE Employee DROP INDEX uidx_company_phno`,
+    `ALTER TABLE Employee DROP FOREIGN KEY employee_ibfk_1`,
+    `ALTER TABLE Employee DROP FOREIGN KEY fk_employee_company`,
+  ];
+  for (const sql of indexesToDrop) { try { await initConn.query(sql); } catch (e) {} }
+
+  try {
+    await initConn.query(`ALTER TABLE Employee ADD CONSTRAINT uidx_company_email UNIQUE (company_id, emp_email), ADD CONSTRAINT uidx_company_phno UNIQUE (company_id, emp_phno);`);
+  } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee MODIFY COLUMN company_id INT NOT NULL;`); } catch (e) {}
+  try { await initConn.query(`ALTER TABLE Employee ADD CONSTRAINT fk_employee_company FOREIGN KEY (company_id) REFERENCES Company(company_id) ON DELETE CASCADE;`); } catch (e) {}
+
+  // ─── Seed default users ──────────────────────────────────────────
   const [rows] = await initConn.query('SELECT COUNT(*) AS cnt FROM Employee;');
   if (rows[0].cnt === 0) {
-    // Passwords pre-hashed with bcrypt (rounds=10), plaintext = "password123"
     const hash = '$2a$10$fQAsd8Ir38cjAtQfnYPINubm65ohKoJUBysTFok/s4dYm./bpcIva';
-
     await initConn.query(`
-      INSERT INTO Company (company_id, company_name, company_code)
-      VALUES (1, 'Odoo India', 'OI');
-
-      INSERT INTO Employee (emp_id, login_id, emp_name, emp_department, emp_role, emp_email, emp_phno, joining_year, serial_num, company_id)
-      VALUES
+      INSERT INTO Company (company_id, company_name, company_code) VALUES (1, 'Odoo India', 'OI') ON DUPLICATE KEY UPDATE company_name = 'Odoo India', company_code = 'OI';
+      INSERT INTO Employee (emp_id, login_id, emp_name, emp_department, emp_role, emp_email, emp_phno, joining_year, serial_num, company_id) VALUES
         (1, 'OIADUS20260001', 'Admin User',  'Management',      'ADMIN',    'admin@admin.com', '9876543210', 2026, 1, 1),
         (2, 'OIHRMA20260002', 'HR Manager',  'Human Resources', 'HR',       'hr@hr.com',       '9876543211', 2026, 2, 1),
         (3, 'JODO20260003',   'John Doe',    'Engineering',     'EMPLOYEE', 'john@gmail.com',  '9876543212', 2026, 3, 1);
-
-      INSERT INTO Login (emp_id, login_id, Password, acc_status)
-      VALUES
+      INSERT INTO Login (emp_id, login_id, Password, acc_status) VALUES
         (1, 'OIADUS20260001', '${hash}', 'Active'),
         (2, 'OIHRMA20260002', '${hash}', 'Active'),
         (3, 'JODO20260003',   '${hash}', 'Active');

@@ -45,6 +45,8 @@ router.post('/login', async (req, res) => {
     }
 
     // Generate JWT token (do NOT embed large base64 logo_url in JWT token!)
+    // SECURITY: company_id is sourced from the DB join — never from client input.
+    // All downstream tenant-scoped queries use req.user.company_id from this token.
     const payload = {
       emp_id: user.emp_id,
       login_id: user.login_id || user.loginId,
@@ -52,6 +54,7 @@ router.post('/login', async (req, res) => {
       emp_role: user.emp_role,
       emp_email: user.emp_email,
       emp_department: user.emp_department,
+      company_id: user.company_id,
       company_name: user.company_name || 'Dayflow',
       is_temp_pass: user.is_temp_pass || false
     };
@@ -95,7 +98,8 @@ router.post('/register', async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    // Check existing email or phone
+    // For registration, check globally — each registration creates a new company,
+    // so if the email/phone is already used anywhere it indicates a duplicate admin attempt.
     const [existing] = await conn.query(
       'SELECT emp_id FROM Employee WHERE emp_email = ? OR emp_phno = ?',
       [email, phone]
@@ -114,11 +118,11 @@ router.post('/register', async (req, res) => {
     );
     const companyId = compResult.insertId;
 
-    // 2. Compute Login ID
+    // 2. Compute Login ID — scope serial to this company so IDs don't collide across tenants
     const currentYear = new Date().getFullYear();
     const [serialRow] = await conn.query(
-      'SELECT COUNT(*) as count FROM Employee WHERE joining_year = ?',
-      [currentYear]
+      'SELECT COUNT(*) as count FROM Employee WHERE company_id = ? AND joining_year = ?',
+      [companyId, currentYear]
     );
     const serial = serialRow[0].count + 1;
     const loginId = generateLoginId(compCode, name, currentYear, serial);

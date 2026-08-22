@@ -3,7 +3,13 @@ const router = express.Router();
 const db = require('../db');
 const { authenticateToken, isAdminOrHR } = require('../middleware/auth');
 
-// Apply for leave (Authenticated users)
+// ─────────────────────────────────────────────────────────────────────────────
+// SECURITY NOTE: All manager-level queries join back to Employee and filter
+// by e.company_id = req.user.company_id to prevent cross-tenant data leakage.
+// Regular employees can only see/create their own leave requests (emp_id from JWT).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Apply for leave (Authenticated users) — emp_id from JWT, inherently tenant-safe
 router.post('/', authenticateToken, async (req, res) => {
   const { from_date, to_date, reason, leave_type } = req.body;
   const empId = req.user.emp_id;
@@ -26,27 +32,34 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
-// List leaves (Employees see own, Admin/HR see all or filtered by emp_id)
+// List leaves — employees see own; managers see all within their company
 router.get('/', authenticateToken, async (req, res) => {
   const { emp_id, status } = req.query;
+  const companyId = req.user.company_id;
   const isManager = req.user.emp_role === 'ADMIN' || req.user.emp_role === 'HR';
 
-  let targetEmpId = req.user.emp_id;
-  if (isManager && emp_id) {
-    targetEmpId = emp_id;
-  }
-
   try {
-    let query = 'SELECT lr.*, e.emp_name, e.emp_department, e.emp_role, mgr.emp_name as manager_name FROM Leave_Request lr JOIN Employee e ON lr.emp_id = e.emp_id LEFT JOIN Employee mgr ON lr.approved_by = mgr.emp_id WHERE 1=1';
-    const params = [];
+    // SECURITY: The base JOIN to Employee + company_id filter ensures managers
+    // only see leave requests from their own company, regardless of any emp_id
+    // query param provided in the request.
+    let query = `
+      SELECT lr.*, e.emp_name, e.emp_department, e.emp_role, mgr.emp_name as manager_name
+      FROM Leave_Request lr
+      JOIN Employee e ON lr.emp_id = e.emp_id AND e.company_id = ?
+      LEFT JOIN Employee mgr ON lr.approved_by = mgr.emp_id
+      WHERE 1=1
+    `;
+    const params = [companyId];
 
-    // If not manager, strictly filter by own ID
     if (!isManager) {
+      // Regular employees: only their own leave requests
       query += ' AND lr.emp_id = ?';
-      params.push(targetEmpId);
+      params.push(req.user.emp_id);
     } else if (emp_id) {
+      // Managers requesting a specific employee's leaves:
+      // the JOIN already ensures emp belongs to the same company
       query += ' AND lr.emp_id = ?';
-      params.push(targetEmpId);
+      params.push(emp_id);
     }
 
     if (status) {
@@ -64,11 +77,20 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-// Fetch pending leave requests (Admin/HR Only)
+// Fetch pending leave requests (Admin/HR Only) — tenant-scoped
 router.get('/pending', authenticateToken, isAdminOrHR, async (req, res) => {
+  const companyId = req.user.company_id;
+
   try {
+    // SECURITY: JOIN to Employee + company_id = ? ensures only this company's
+    // pending leaves are returned.
     const [rows] = await db.query(
-      "SELECT lr.*, e.emp_name, e.emp_department, e.emp_role FROM Leave_Request lr JOIN Employee e ON lr.emp_id = e.emp_id WHERE lr.approved_status = 'Pending' ORDER BY lr.from_date ASC"
+      `SELECT lr.*, e.emp_name, e.emp_department, e.emp_role
+       FROM Leave_Request lr
+       JOIN Employee e ON lr.emp_id = e.emp_id AND e.company_id = ?
+       WHERE lr.approved_status = 'Pending'
+       ORDER BY lr.from_date ASC`,
+      [companyId]
     );
     return res.json(rows);
   } catch (error) {
@@ -77,9 +99,10 @@ router.get('/pending', authenticateToken, isAdminOrHR, async (req, res) => {
   }
 });
 
-// Approve or Reject a Leave (Admin/HR Only)
+// Approve or Reject a Leave (Admin/HR Only) — tenant-scoped ownership check
 router.put('/:id', authenticateToken, isAdminOrHR, async (req, res) => {
   const { id } = req.params;
+  const companyId = req.user.company_id;
   const statusInput = req.body.status || req.body.approved_status;
   const managerId = req.user.emp_id;
 
@@ -90,7 +113,16 @@ router.put('/:id', authenticateToken, isAdminOrHR, async (req, res) => {
   const finalStatus = statusInput === 'Refused' ? 'Rejected' : statusInput;
 
   try {
-    const [existing] = await db.query('SELECT * FROM Leave_Request WHERE leave_id = ?', [id]);
+    // SECURITY: Verify the leave request belongs to an employee in THIS company.
+    // This prevents a manager from Company A approving Company B's leave requests.
+    const [existing] = await db.query(
+      `SELECT lr.leave_id
+       FROM Leave_Request lr
+       JOIN Employee e ON lr.emp_id = e.emp_id AND e.company_id = ?
+       WHERE lr.leave_id = ?`,
+      [companyId, id]
+    );
+
     if (existing.length === 0) {
       return res.status(404).json({ message: 'Leave request not found' });
     }
