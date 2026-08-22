@@ -126,10 +126,8 @@ router.post('/', authenticateToken, isAdminOrHR, async (req, res) => {
 // Get detailed info for single employee
 router.get('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-
-  if (req.user.emp_role === 'EMPLOYEE' && String(req.user.emp_id) !== String(id)) {
-    return res.status(403).json({ message: 'Access Denied: You can only view your own details' });
-  }
+  const isSelf = String(req.user.emp_id) === String(id);
+  const isManager = req.user.emp_role === 'ADMIN' || req.user.emp_role === 'HR';
 
   try {
     const [rows] = await db.query(
@@ -145,7 +143,27 @@ router.get('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
-    return res.json(rows[0]);
+    const empData = rows[0];
+
+    // If viewing another colleague's profile as a regular EMPLOYEE, strip confidential/private information
+    if (!isSelf && !isManager) {
+      return res.json({
+        emp_id: empData.emp_id,
+        login_id: empData.login_id,
+        emp_name: empData.emp_name,
+        emp_department: empData.emp_department,
+        emp_role: empData.emp_role,
+        emp_email: empData.emp_email,
+        emp_phno: empData.emp_phno,
+        job_position: empData.job_position || empData.emp_role,
+        location: empData.location || 'Company HQ',
+        company_name: empData.company_name || 'Odoo India',
+        acc_status: empData.acc_status,
+        is_public_view: true // Flag indicating limited public colleague view
+      });
+    }
+
+    return res.json(empData);
   } catch (error) {
     console.error('Fetch employee detail error:', error);
     return res.status(500).json({ message: 'Internal Server Error' });

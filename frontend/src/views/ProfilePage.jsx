@@ -8,7 +8,7 @@ const ProfilePage = ({ user, onUserUpdate, readOnly = false }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const [activeTab, setActiveTab] = useState('private'); // 'resume', 'private', 'salary', 'security'
+  const [activeTab, setActiveTab] = useState(readOnly ? 'resume' : 'private'); // 'resume', 'private', 'salary', 'security'
 
   // Extended Wireframe Form State
   const [formData, setFormData] = useState({
@@ -38,8 +38,10 @@ const ProfilePage = ({ user, onUserUpdate, readOnly = false }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
 
   useEffect(() => {
-    fetchProfileDetails();
-  }, []);
+    if (user && user.emp_id) {
+      fetchProfileDetails();
+    }
+  }, [user?.emp_id]);
 
   const fetchProfileDetails = async () => {
     setLoading(true);
@@ -54,13 +56,13 @@ const ProfilePage = ({ user, onUserUpdate, readOnly = false }) => {
         company_name: data.company_name || 'Odoo India',
         emp_department: data.emp_department || '',
         location: data.location || 'India',
-        dob: data.dob ? data.dob.substring(0, 10) : '',
+        dob: data.dob ? String(data.dob).substring(0, 10) : '',
         residing_address: data.residing_address || '',
         nationality: data.nationality || 'Indian',
         personal_email: data.personal_email || data.emp_email || '',
         gender: data.gender || 'Male',
         marital_status: data.marital_status || 'Single',
-        date_of_joining: data.date_of_joining ? data.date_of_joining.substring(0, 10) : '2026-01-01',
+        date_of_joining: data.date_of_joining ? String(data.date_of_joining).substring(0, 10) : '2026-01-01',
         bank_account_no: data.bank_account_no || '',
         bank_name: data.bank_name || '',
         ifsc_code: data.ifsc_code || '',
@@ -68,7 +70,8 @@ const ProfilePage = ({ user, onUserUpdate, readOnly = false }) => {
         uan_no: data.uan_no || ''
       });
     } catch (err) {
-      setError('Failed to fetch profile details');
+      console.error('Profile fetch error:', err);
+      setError(err.message || 'Failed to fetch profile details');
     } finally {
       setLoading(false);
     }
@@ -276,24 +279,28 @@ const ProfilePage = ({ user, onUserUpdate, readOnly = false }) => {
         >
           Resume
         </button>
-        <button
-          className={activeTab === 'private' ? 'active' : ''}
-          onClick={() => setActiveTab('private')}
-        >
-          Private Info
-        </button>
-        <button
-          className={activeTab === 'salary' ? 'active' : ''}
-          onClick={() => setActiveTab('salary')}
-        >
-          Salary Info
-        </button>
-        <button
-          className={activeTab === 'security' ? 'active' : ''}
-          onClick={() => setActiveTab('security')}
-        >
-          Security
-        </button>
+        {!readOnly && (
+          <>
+            <button
+              className={activeTab === 'private' ? 'active' : ''}
+              onClick={() => setActiveTab('private')}
+            >
+              Private Info
+            </button>
+            <button
+              className={activeTab === 'salary' ? 'active' : ''}
+              onClick={() => setActiveTab('salary')}
+            >
+              Salary Info
+            </button>
+            <button
+              className={activeTab === 'security' ? 'active' : ''}
+              onClick={() => setActiveTab('security')}
+            >
+              Security
+            </button>
+          </>
+        )}
       </div>
 
       {/* TAB 1: RESUME */}

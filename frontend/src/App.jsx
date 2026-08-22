@@ -97,7 +97,7 @@ function App() {
       case 'salary':
         return currentUser.emp_role === 'ADMIN' ? <SalaryPage user={currentUser} /> : <EmployeesPage user={currentUser} />;
       case 'profile':
-        return <ProfilePage user={profileTarget || currentUser} onUserUpdate={handleUserUpdate} readOnly={Boolean(profileTarget)} />;
+        return <ProfilePage user={profileTarget || currentUser} currentUser={currentUser} onUserUpdate={handleUserUpdate} readOnly={Boolean(profileTarget && profileTarget.emp_id !== currentUser.emp_id)} />;
       default:
         return <EmployeesPage user={currentUser} onViewProfile={(employee) => { setProfileTarget(employee); setActiveView('profile'); }} />;
     }
