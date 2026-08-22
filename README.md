@@ -1,178 +1,91 @@
 # Dayflow
 
-# Dayflow — HR Management System
+**Dayflow** is a modern, full-stack Human Resource Management System (HRMS) designed to streamline employee management, attendance tracking, leave requests, and payroll operations through a centralized and secure platform.
 
-> A full-stack Human Resource Management System (HRMS) designed to simplify employee management, attendance tracking, leave management, and payroll operations through a centralized platform.
+## 🚀 Key Features
 
----
+- **Role-Based Access Control (RBAC):** Secure and granular access for Administrators, HR Managers, and Employees.
+- **Employee Directory:** Centralized hub for managing staff records, profiles, and credentials.
+- **Time & Attendance:** Real-time clock-in/out tracking and historical attendance logs.
+- **Leave Management:** End-to-end leave request and manager approval workflows.
+- **Automated Payroll:** Dynamic, attendance-based salary calculations and digital PDF payslip generation.
+- **Multi-Tenant Architecture:** Strict company-level data isolation for enterprise security.
 
-## 📌 Overview
+## 🛠️ Tech Stack
 
-**Dayflow** is a full-stack HR Management System that provides organizations with a centralized platform to manage employees, attendance, leave requests, salaries, and authentication.
-
-The system implements **role-based access control (RBAC)** to provide different levels of access to **Administrators, HR Managers, and Employees**.
-
-### ✨ Key Highlights
-
-- 🔐 Secure authentication with role-based access control
-- 👥 Complete employee management
-- ⏱️ Real-time attendance tracking
-- 📝 Employee leave request and approval workflow
-- 💰 Automated salary and payroll calculations
-- 📄 Digital and printable payslips
-- 🏢 Company registration and management
-- 🗄️ MySQL database with automatic initialization
-- 🌐 RESTful backend API
-- 💻 Separate frontend and backend architecture
+- **Frontend:** React, Vite, Tailwind CSS
+- **Backend:** Node.js, Express
+- **Database:** MySQL
+- **Security:** JSON Web Tokens (JWT)
 
 ---
 
-# 🚀 Features
+## ⚙️ Local Deployment & Setup
 
-## 1. 🔐 Authentication & Role-Based Access Control
+Follow these instructions to get the Dayflow application running on your local machine for development or testing.
 
-Dayflow provides secure authentication and access management for different types of users.
+### Prerequisites
 
-### Features
+Ensure you have the following installed on your system:
+- [Node.js](https://nodejs.org/) (v18 or higher)
+- [MySQL Server](https://dev.mysql.com/downloads/mysql/) (or XAMPP for Windows users)
+- Git
 
-- Login using **Email or custom Login ID**
-- Role-based access control
-- Supported roles:
-  - `ADMIN`
-  - `HR`
-  - `EMPLOYEE`
-- Role-specific dashboards and permissions
-- Company registration
-- Temporary password generation for employee accounts
+### 1. Database Configuration
 
----
+1. Start your MySQL service.
+2. Create a new database for the application.
+   ```sql
+   CREATE DATABASE dayflow_db;
+   ```
+> **Note:** You do not need to manually import SQL tables. The backend application will automatically generate the required database schema and seed the initial data upon its first startup.
 
-## 2. 👥 Employee Management
+### 2. Backend Setup
 
-HR and administrators can manage employee information from a centralized directory.
+1. Open a terminal and navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Create a `.env` file in the `backend` directory. You can use the `.env.example` if available, or define the following environment variables:
+   ```env
+   PORT=5000
+   DB_HOST=localhost
+   DB_USER=root
+   DB_PASS=your_mysql_password
+   DB_NAME=dayflow_db
+   JWT_SECRET=your_super_secret_jwt_key
+   ```
+4. Start the backend development server:
+   ```bash
+   npm run dev
+   ```
 
-### Features
+### 3. Frontend Setup
 
-- Employee directory
-- Employee search
-- Role-based profile editing
-- Employee account creation
-- Temporary password generation
-- Employee account deletion
-- Cascaded deletion of associated account data
+1. Open a new terminal instance and navigate to the frontend directory:
+   ```bash
+   cd frontend
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Create a `.env` file in the `frontend` directory to point to your local API:
+   ```env
+   VITE_API_BASE_URL=http://localhost:5000/api
+   ```
+4. Start the frontend development server:
+   ```bash
+   npm run dev
+   ```
 
----
+### 4. Accessing the Application
 
-## 3. ⏱️ Real-Time Attendance
+Once both servers are running successfully, open your web browser and navigate to the frontend URL (typically `http://localhost:5173`).
 
-Dayflow provides an integrated attendance management system.
-
-### Features
-
-- Quick **Clock-In / Clock-Out** toggle
-- Automatic shift duration calculation
-- Attendance history
-- Team attendance roster
-- Attendance status tracking
-- Integration with payroll calculations
-
----
-
-## 4. 📝 Leave Management
-
-Employees can submit leave requests while HR/management can review and process them.
-
-### Workflow
-
-```text
-Employee
-   ↓
-Submit Leave Request
-   ↓
-HR / Manager Review
-   ↓
-Approve / Reject
-   ↓
-Attendance & Payroll Synchronization
-
-Features
-Leave request submission
-Leave history
-Manager/HR approval hub
-Leave approval and rejection
-Attendance synchronization
-Payroll synchronization
-
-5. 💰 Payroll & Payslips
-
-Dayflow provides dynamic salary calculations based on employee wage structures and attendance.
-
-Features
-Monthly salary calculation
-Basic salary management
-Allowance breakdown
-Absenteeism deductions
-Capped deduction calculations
-Custom wage structure editing
-Payroll synchronization with attendance
-Digital payslip generation
-Printable payslips
-🏗️ System Architecture
-
-Dayflow follows a separated frontend–backend architecture.
-
-                    ┌─────────────────────┐
-                    │      Frontend       │
-                    │                     │
-                    │   User Interface    │
-                    └──────────┬──────────┘
-                               │
-                               │ REST API
-                               ▼
-                    ┌─────────────────────┐
-                    │       Backend       │
-                    │                     │
-                    │ Authentication      │
-                    │ Employee Management │
-                    │ Attendance          │
-                    │ Leave Management    │
-                    │ Payroll             │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │       MySQL         │
-                    │      Database       │
-                    └─────────────────────┘
-🗄️ Database Schema
-
-The system uses MySQL as its primary relational database.
-
-Main Entities
-Company
-Employee
-Login
-Attendance
-Leave_Request
-Salary
-
-🛠️ Technology Stack
-Layer	Technology
-Frontend	HTML, CSS, JavaScript
-Backend	Node.js
-API	REST API
-Database	MySQL
-Database Environment	MySQL / XAMPP
-Package Manager	npm
-Development	VS Code
-
-⚙️ Installation & Setup
-Prerequisites
-
-Make sure the following are installed:
-
-Node.js 18+
-npm
-MySQL or XAMPP
-Git
-VS Code (recommended)
+- **Initial Login:** 
+  Upon the first backend startup, the system will seed a default Company and Admin user. Check your backend terminal output for the generated admin credentials, or use the UI to register a brand new company.
