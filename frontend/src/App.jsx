@@ -19,6 +19,7 @@ function App() {
   const [profileTarget, setProfileTarget] = useState(null);
   const [punchStatus, setPunchStatus] = useState(null);
   const [punchLoading, setPunchLoading] = useState(false);
+  const isManager = currentUser?.emp_role === 'ADMIN' || currentUser?.emp_role === 'HR';
 
   useEffect(() => {
     // Check if user is already authenticated on mount
@@ -86,7 +87,7 @@ function App() {
   const renderActiveView = () => {
     switch (activeView) {
       case 'dashboard':
-        return <DashboardPage user={currentUser} onViewChange={setActiveView} />;
+        return isManager ? <DashboardPage user={currentUser} onViewChange={setActiveView} /> : <EmployeesPage user={currentUser} onViewProfile={(employee) => { setProfileTarget(employee); setActiveView('profile'); }} />;
       case 'employees':
         return <EmployeesPage user={currentUser} onViewProfile={(employee) => { setProfileTarget(employee); setActiveView('profile'); }} />;
       case 'attendance':
@@ -98,7 +99,7 @@ function App() {
       case 'profile':
         return <ProfilePage user={profileTarget || currentUser} onUserUpdate={handleUserUpdate} readOnly={Boolean(profileTarget)} />;
       default:
-        return <DashboardPage user={currentUser} onViewChange={setActiveView} />;
+        return <EmployeesPage user={currentUser} onViewProfile={(employee) => { setProfileTarget(employee); setActiveView('profile'); }} />;
     }
   };
 
@@ -121,13 +122,13 @@ function App() {
         </div>
 
         <nav className="sidebar-menu">
-          <a
+          {isManager && <a
             className={`sidebar-item ${activeView === 'dashboard' ? 'active' : ''}`}
             onClick={() => { setActiveView('dashboard'); setIsSidebarOpen(false); }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="9" /><rect x="14" y="3" width="7" height="5" /><rect x="14" y="12" width="7" height="9" /><rect x="3" y="16" width="7" height="5" /></svg>
             Dashboard
-          </a>
+          </a>}
 
           <a
             className={`sidebar-item ${activeView === 'employees' ? 'active' : ''}`}
